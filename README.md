@@ -1,2 +1,45 @@
-# -
-This is my game
+# THE MIDNIGHT FISHING – អាថ៌កំបាំងវាលស្រែខ្មែរ  (Version 2)
+
+## Run (VS Code + Live Server)
+1. Keep all files in one folder: index.html, style.css, script.js, core.js, audio.js, environment.js, house.js, fishing.js, ghost.js, events.js, player.js, ui.js
+2. Open the folder in VS Code, install the "Live Server" extension.
+3. Right-click index.html -> "Open with Live Server" (ES modules do not work from file://).
+4. Internet is needed once (Three.js from the unpkg CDN, Google Fonts).
+5. Phone: open http://<PC-IP>:5500 on the same Wi-Fi. Touch controls appear automatically. Use Settings -> Graphics: Low on weak phones (reload after changing).
+
+## Controls
+WASD move · Mouse look · Shift run · Space jump · E interact / place trap / pull trap · F flashlight · Left click place trap · Esc pause
+Phone: left stick move, drag right side to look, buttons RUN / jump / E / flashlight / trap.
+
+## Goal
+Take the flashlight + traps from the table, place 5 traps in the paddy water, collect 3 fish, return to the house alive.
+Press E at a placed trap to pull it out of the water: a caught fish goes to your inventory and you get the trap back.
+
+## What's new in V2
+- Denser rice (6-blade clumps, varied heights, grain heads, colour variation, wind + gusts), brown muddy water, thicker fog, fake AO under trees, closer village, frogs hopping on the dikes.
+- Real បង្កៃ: bent bamboo pole (ដងបង្កៃ) planted in the mud, thin line (ខ្សែបង្កៃ) and bait (នុយ) at the water; the fish hangs on the line; carried shape has the line pulled taut and tied to the pole; pull-out animation with fish visible inside; visible hands (place / pull animations), flashlight in hand with beam cone.
+- Better fish models; fish flee when you splash, hide in the rice, and bite the bait (trap tugs).
+- Ghost: taller, torn dress, sunken eyes, teeth, more hair. Encounters: stare, watch (vanishes when you look away, may reappear closer), creep (moves only when unseen), hiding in rice, behind you, on the path, behind trees, hunts.
+- New events with cooldowns: shadow across the fields, canal gurgling, fish leaping, a trap that moves by itself, plus the existing cries, steps, rice gusts, flicker.
+- Audio: positional frog ribbits/hops, canal sounds, stingers, mud splash steps.
+- Graphics: colour grading, AA on Medium/High, Low/Medium/High presets.
+
+## 👻 Rigged 3D ghost (ghost.glb)
+The ghost is now the Mixamo-rigged model `assets/ghost.glb` (loaded by `ghostrig.js`). The old procedural ghost remains as an automatic fallback if the file fails to load.
+Existing GhostAI behaviour (appear / follow / rush / hide / jumpscare) now drives bones via actions: `idle, stare, creep, walk, run, crouch, reach, scream, jumpscare`.
+Coder API (`ghostrig.js`): `rig.play('run')`, `rig.gesture('headSnap'|'tilt'|'point'|'reach'|'shudder'|'lunge')`, `rig.hold('Head',[x,y,z])`, `rig.bones.Head`. Add new poses in the `ACTIONS` table.
+Note: GLB is 11.6 MB, so first load takes a moment. Run with Live Server (needs http, not file://).
+
+## ❤️ Health & escape
+The ghost no longer kills instantly. You have 100 HP (HEALTH bar): each hit costs 34 HP and shoves her back; she recoils ~1 s. After a hit, if she fails to touch you for 5 seconds she dissolves and the hunt ends. A third hit is the jumpscare/game over. HP regenerates slowly when no hunt is active.
+
+## Fullscreen
+Pressing START (and Resume) switches the browser to full screen automatically (and locks landscape on phones where allowed).
+
+## 3D arms
+Both first-person arms use assets/hand_left.glb and assets/hand_right.glb (loaded in player.js; falls back to simple arms). Size: HAND_SCALE in player.js (0.34). If left/right look swapped, swap the two file names there.
+
+Hand tuning (player.js): HAND_SCALE (size), HAND_Z (distance), ROLL_L / ROLL_R (roll of each forearm in radians; try 0.8 or -0.8 if the palm faces the wrong way).
+
+## Loading screen
+The loading screen is the FIRST screen (the world and 3D models build as soon as the page opens, then the menu appears). index.html #loading uses assets/loading.jpg with a running red line + percentage. The bar follows real progress (world build, then the ghost.glb download and arm models); the game starts after they are ready (max 40 s wait, then falls back).

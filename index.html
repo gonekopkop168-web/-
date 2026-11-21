@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#050608">
+<title>THE MIDNIGHT FISHING – អាថ៌កំបាំងវាលស្រែខ្មែរ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Moul&family=Koulen&family=Noto+Sans+Khmer:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- cinematic overlays -->
+<div id="vignette"></div>
+<div id="bloodTint"></div>
+<div id="grade"></div>
+<canvas id="grain"></canvas>
+<div id="flash"></div>
+<div id="introFade"></div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="missionPanel">
+    <div class="mTitle">បេសកកម្ម · MISSION</div>
+    <div id="objective">…</div>
+    <div class="mRow"><span>ត្រីចាប់បាន · Fish</span><b id="fishCount">0/3</b></div>
+    <div class="mRow"><span>បង្កៃដាក់ · Traps</span><b id="trapCount">0/5</b></div>
+    <div class="mRow"><span>ត្រឡប់ផ្ទះ · Return</span><b id="returnState">—</b></div>
+  </div>
+
+  <button id="btnPause" class="hudBtn" aria-label="Pause">❚❚</button>
+
+  <div id="bars">
+    <div class="barWrap"><label>ឈាម · HEALTH <em id="hpTxt">100</em></label><div class="bar"><i id="hpBar"></i></div></div>
+    <div class="barWrap"><label>ថ្មពិល · BATTERY <em id="batteryTxt">—</em></label><div class="bar"><i id="batteryBar"></i></div></div>
+    <div class="barWrap"><label>កម្លាំង · STAMINA</label><div class="bar"><i id="staminaBar"></i></div></div>
+  </div>
+
+  <div id="inventory">
+    <div class="slot" id="slotFlash"><span class="ic">🔦</span><small>F</small></div>
+    <div class="slot" id="slotTraps"><span class="ic">🪤</span><b id="invTraps">0</b><small>បង្កៃ</small></div>
+    <div class="slot" id="slotFish"><span class="ic">🐟</span><b id="invFish">0</b><small id="invFishDetail"></small></div>
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="prompt"></div>
+  <div id="toast"></div>
+</div>
+
+<!-- touch controls -->
+<div id="touch" class="hidden">
+  <div id="joyZone"></div>
+  <div id="lookZone"></div>
+  <div id="joyBase"><div id="joyKnob"></div></div>
+  <button id="tRun" class="tBtn">RUN</button>
+  <button id="tJump" class="tBtn">▲</button>
+  <button id="tAct" class="tBtn big">E</button>
+  <button id="tLight" class="tBtn">🔦</button>
+  <button id="tTrap" class="tBtn">🪤</button>
+</div>
+
+<!-- screens -->
+<div id="rotateMsg"><div class="rotPhone"></div><b>សូមបង្វិលទូរស័ព្ទជាផ្ដេក</b><small>Please rotate your phone to landscape</small></div>
+<section id="loading" class="screen active">
+  <div class="loadBg"></div><div class="loadVig"></div><div class="loadMist"></div>
+  <div class="loadBox">
+    <h1 class="loadKh" data-t="អាថ៌កំបាំងផ្ទះដាច់ស្រយាល">អាថ៌កំបាំងផ្ទះដាច់ស្រយាល</h1>
+    <h2 class="loadTitle">THE MIDNIGHT FISHING</h2>
+    <p id="loadText">កំពុងផ្ទុក… Building the rice fields…</p>
+    <div class="loadBar"><i id="loadFill"></i><b class="loadScan"></b></div>
+    <div id="loadPct">0%</div>
+    <p id="loadHint" class="loadHint"></p>
+    <p class="loadTap">ចុចអេក្រង់ ដើម្បីចូលពេញអេក្រង់ · Tap for fullscreen</p>
+  </div>
+</section>
+
+<section id="menu" class="screen">
+  <div class="menuBg"></div>
+  <div class="menuInner">
+    <h1 class="title"><span>THE MIDNIGHT</span><span class="red">FISHING</span></h1>
+    <h2 class="sub">អាថ៌កំបាំងវាលស្រែខ្មែរ</h2>
+    <nav class="menuBtns">
+      <button id="btnStart"><b>ចាប់ផ្តើមហ្គេម</b><small>START GAME</small></button>
+      <button id="btnSettings"><b>ការកំណត់</b><small>SETTINGS</small></button>
+      <button id="btnHow"><b>របៀបលេង</b><small>HOW TO PLAY</small></button>
+    </nav>
+    <p class="warn">🎧 ប្រើកាស · Headphones recommended. Contains horror &amp; jump scares.</p>
+  </div>
+</section>
+
+<section id="settings" class="screen">
+  <div class="panel">
+    <h2>ការកំណត់ · SETTINGS</h2>
+    <label>សំឡេង · Volume <input id="setVolume" type="range" min="0" max="1" step="0.05"></label>
+    <label>ភាពរហ័សកាមេរ៉ា · Look sensitivity <input id="setSens" type="range" min="0.3" max="2.5" step="0.1"></label>
+    <label>គុណភាព · Graphics
+      <select id="setQuality"><option value="low">Low (phones)</option><option value="medium">Medium</option><option value="high">High (desktop)</option></select>
+    </label>
+    <p class="hint" id="qualityHint">Graphics changes fully apply after reloading the page.</p>
+    <button id="btnSettingsBack" class="solid">← ត្រឡប់ · BACK</button>
+  </div>
+</section>
+
+<section id="howto" class="screen">
+  <div class="panel wide">
+    <h2>របៀបលេង · HOW TO PLAY</h2>
+    <p class="story">It is midnight. You wake in an old wooden house. Take the <b>flashlight</b> and the <b>បង្កៃ</b> (a bent bamboo pole with a line and bait), walk the narrow rice-field dikes, place <b>5 traps</b> in the paddies, catch <b>3 fish</b> — then get back home alive. <span class="red">She</span> is out there.</p>
+    <div class="keys">
+      <div><kbd>W A S D</kbd> Move</div><div><kbd>Mouse</kbd> Look</div>
+      <div><kbd>Shift</kbd> Run (uses stamina)</div><div><kbd>Space</kbd> Jump</div>
+      <div><kbd>E</kbd> Interact / place trap / collect fish</div><div><kbd>Left Click</kbd> Place fishing trap</div>
+      <div><kbd>F</kbd> Flashlight</div><div><kbd>Esc</kbd> Pause</div>
+    </div>
+    <ul class="tips">
+      <li>Place traps only in the <b>water between the rice</b> (a green ghost-trap shows where).</li>
+      <li>Return later and press <kbd>E</kbd> at a trap to <b>pull it out of the water</b>. If a fish is inside, it joins your inventory and you get the trap back to place again.</li>
+      <li>Fish flee when you splash near them. Strange things happen on the fields: watch the shadows, the canals and your traps.</li>
+      <li>The house door can be closed – she cannot get through a closed door.</li>
+      <li>Running too long exhausts you. Batteries can be replaced at the table.</li>
+      <li><b>Phone:</b> left stick = move, drag right side = look, buttons for run / jump / interact / light / trap.</li>
+    </ul>
+    <button id="btnHowBack" class="solid">← ត្រឡប់ · BACK</button>
+  </div>
+</section>
+
+<section id="pause" class="screen">
+  <div class="panel">
+    <h2>ផ្អាក · PAUSED</h2>
+    <button id="btnResume" class="solid">បន្ត · RESUME</button>
+    <button id="btnPauseSettings">ការកំណត់ · SETTINGS</button>
+    <button id="btnRestart">ចាប់ផ្តើមឡើងវិញ · RESTART</button>
+    <button id="btnToMenu">ម៉ឺនុយ · MAIN MENU</button>
+  </div>
+</section>
+
+<section id="intro" class="screen passthrough">
+  <div class="introText" id="introText"></div>
+  <div class="skip" id="introSkip">Enter / tap · skip</div>
+</section>
+
+<section id="gameover" class="screen">
+  <div class="panel dead">
+    <h1>YOU DIED</h1>
+    <h2 class="sub">ខ្មោចចាប់បានអ្នកហើយ</h2>
+    <p id="deadStats"></p>
+    <button id="btnRetry" class="solid">ព្យាយាមម្តងទៀត · TRY AGAIN</button>
+    <button id="btnDeadMenu">ម៉ឺនុយ · MAIN MENU</button>
+  </div>
+</section>
+
+<section id="victory" class="screen">
+  <div class="panel win">
+    <h1>YOU SURVIVED</h1>
+    <h2 class="sub">អ្នករួចជីវិត · ព្រឹកមកដល់ហើយ</h2>
+    <p id="winStats"></p>
+    <button id="btnPlayAgain" class="solid">លេងម្តងទៀត · PLAY AGAIN</button>
+    <button id="btnWinMenu">ម៉ឺនុយ · MAIN MENU</button>
+  </div>
+</section>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>
