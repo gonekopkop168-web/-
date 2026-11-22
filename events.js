@@ -2,7 +2,7 @@
 import { THREE, V3, rand, clamp, pick, HALF, WATER_Y } from './core.js';
 import { makeFishMesh } from './fishing.js';
 
-const COOLDOWN = { cry: 18, whisper: 20, steps: 28, breath: 25, rice: 22, flicker: 16, knock: 30, distant: 50, path: 70, tree: 60, shadow: 50, fishjump: 30, trapmove: 75, canal: 35, behind: 80, watch: 55, creep: 75, ricehide: 60, hunt: 0 };
+const COOLDOWN = { cry: 18, whisper: 20, steps: 28, breath: 25, rice: 22, flicker: 16, knock: 30, distant: 50, path: 70, tree: 60, shadow: 50, fishjump: 30, trapmove: 75, canal: 35, behind: 80, watch: 55, creep: 75, ricehide: 60, weeper: 110, hunt: 0 };
 
 export class HorrorEvents {
   constructor(game) {

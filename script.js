@@ -62,7 +62,7 @@ class GameManager {
   }
   resetWorld() {
     for (const t of this.traps) t.dispose(); this.traps = []; this.fishCollected = 0; this.trapsPlacedTotal = 0; this.fishByType = {}; this.time = 0; this.hudT = 0;
-    this.hp = 100; this.hpRegenT = 0; this.player.reset(); this.ghost.reset(); this.fishSys.reset(); this.events.reset(); this.frogs.reset(); this.threat = 0;
+    this.hp = 100; this.hpRegenT = 0; this.ambushCool = 60; this.weeping = false; this.player.reset(); this.ghost.reset(); this.fishSys.reset(); this.events.reset(); this.frogs.reset(); this.threat = 0;
     this.env.door.open = false; this.env.door.t = 0; this.env.door.col.active = true;
     for (const it of this.env.houseItems) if (it.mesh) { it.mesh.visible = true; it.taken = false; }
     this.ghost.mesh.scale.set(1, 1, 1); $('bloodTint').style.opacity = 0;
@@ -180,7 +180,10 @@ class GameManager {
         p.carried++; it.taken = true; it.mesh.visible = false; au.pickup();
         if (p.carried === 1) ui.toast('Fishing trap taken. Take at least 5, then go out to the rice fields.', 4000); break;
       case 'pull': {
-        const tr = it.trap; if (!tr.beginPull(() => this.finishPull(tr))) return; p.doAct('pull', 1.2); break;
+        const tr = it.trap;
+        // sometimes the "fish" in the trap is HER
+        if (tr.state === 'caught' && this.ambushCool <= 0 && this.fishCollected >= 1 && !p.inHouse && !this.ghost.hunting && this.ghost.state === 'dormant' && Math.random() < 0.38) return this.startAmbush(tr);
+        if (!tr.beginPull(() => this.finishPull(tr))) return; p.doAct('pull', 1.2); break;
       }
     }
   }
@@ -212,6 +215,7 @@ class GameManager {
             if (this.state === 'intro') { this.introUpdate(dt); this.env.update(dt, this.player); this.fx.update(dt); }
       else if (this.state === 'playing') this.playUpdate(dt);
       else if (this.state === 'caught') this.caughtUpdate(dt);
+      else if (this.state === 'ambush') this.ambushUpdate(dt);
       else if (this.state === 'menu' || this.state === 'paused' || this.state === 'over' || this.state === 'win') this.env.update(dt * (this.state === 'menu' ? 1 : 0), this.player);
       this.audio.setListener(this.camera);
     }
@@ -219,8 +223,9 @@ class GameManager {
   }
   playUpdate(dt) {
     this.time += dt; const p = this.player;
-    p.update(dt); this.env.update(dt, p); this.ghost.update(dt); this.fishSys.update(dt); this.fx.update(dt); this.audio.update(dt, p);
+    p.update(dt); this.env.update(dt, p); this.ghost.update(dt); if (this.weeping) this.weepUpdate(dt); this.fishSys.update(dt); this.fx.update(dt); this.audio.update(dt, p);
     for (const t of this.traps) t.update(dt); this.events.update(dt); this.frogs.update(dt);
+    this.ambushCool -= dt;
     if (!this.ghost.hunting && this.hp < 100) { this.hpRegenT -= dt; if (this.hpRegenT <= 0) this.hp = Math.min(100, this.hp + 2 * dt); }
     $('hpBar').style.width = this.hp + '%'; $('hpTxt').textContent = Math.round(this.hp);
     // threat feedback
@@ -237,6 +242,63 @@ class GameManager {
     // win condition
     if (p.inHouse && this.fishCollected >= this.targets.fish && this.trapsPlacedTotal >= this.targets.traps) this.win();
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.1; this.ui.update(this); }
+  }
+  startWeep() { // she is crying on the dike and you came close: the scene plays out while you stay free to move
+    this.weeping = true; this.wT = 0; this.wF = {}; this.ghost.state = 'weepx'; this.ui.prompt(null, false);
+  }
+  weepUpdate(dt) {
+    const t = (this.wT += dt), gh = this.ghost, p = this.player, au = this.audio, F = this.wF;
+    if (t >= 4.8 && !F.cryOff) { F.cryOff = 1; au.weepStop(1.4); }
+    if (!au.weepLoop && (!F.sobT || t >= F.sobT)) { if (t < 4.8) { au.sob(gh.pos); F.sobT = t + 2.2; } else F.sobT = 1e9; }
+    if (t >= 0.5 && !F.say) { F.say = 1; this.ui.say('យប់ជ្រៅហើយ តើអ្នកមកយំធ្វើអ្វីនៅកន្លែងនេះ?', "It's deep night. Why are you crying here?", 4300); }
+    if (t >= 4.8 && !F.stand) { F.stand = 1; gh.wAct = 'stand'; gh.wFade = 1.4; au.noise({ dur: 0.6, type: 'bandpass', freq: 900, q: 0.7, vol: 0.05, pos: gh.pos }); }
+    if (t >= 5.6) gh.faceTo(p.pos, dt, t >= 9.6 ? 7 : 2.2); // once she is up she turns to look at you
+    if (t >= 6.6 && !F.wipe) { F.wipe = 1; gh.wAct = 'wipe'; gh.wFade = 0.5; }
+    if (t >= 8.3 && !F.gaze) { F.gaze = 1; gh.wAct = 'gaze'; gh.wFade = 1.0; au.sting(0.5); p.flicker(1.2); }
+    if (t >= 8.9 && !F.smoke) { F.smoke = 1; this.fx.smokeOn(gh.pos.x, gh.pos.y, gh.pos.z, 2.8, 0.7, 1.9); au.noise({ dur: 1.6, type: 'lowpass', freq: 380, q: 0.6, vol: 0.09, pos: gh.pos }); au.sting(0.4); } // black smoke wells up around her ...
+    if (t >= 9.6 && !F.morph) { F.morph = 1; gh.setForm('ghost'); gh.wRig = 'ghost'; gh.wAct = 'neckcrack'; gh.wFade = 0.2; gh.wLight = 1.5; this.ui.flash('#050508', 0.7, 320); au.cry(gh.pos); au.sting(1); p.flicker(2.5); } // ... and hides the swap into the ghost
+    for (const ct of [10.65, 10.95, 11.25, 11.6]) if (t >= ct && !F['c' + ct]) { F['c' + ct] = 1; au.crack(gh.pos); }
+        if (t >= 12.4) { // she hunts you now
+      this.weeping = false; gh.wBob = 0; gh.wScale = 1; gh.mesh.scale.set(1, 1, 1); gh.wRig = null; gh.state = 'rush'; gh.hunting = true; gh.huntTime = 20; gh.rushTime = 0; gh.siege = 0; gh.wounded = false; gh.stagger = 0; gh.sink = 0; gh.light.intensity = 0.8;
+      p.flicker(1.2); this.ui.toast('រត់!… RUN!', 2200, true);
+    }
+  }
+  startAmbush(tr) {
+    const gh = this.ghost, cam = this.camera; this.state = 'ambush'; this.ambT = 0; this.ambTrap = tr; this.ambF = {};
+    this.ambBase = cam.position.clone(); this.ambQ0 = cam.quaternion.clone(); this.ambQ = cam.quaternion.clone();
+    const dx = this.ambBase.x - tr.pos.x, dz = this.ambBase.z - tr.pos.z, l = Math.hypot(dx, dz) || 1; this.ambDir = V3(dx / l, 0, dz / l); // from the trap toward the player
+    this.ambS = V3(tr.pos.x, 0, tr.pos.z); this.ambH = V3(this.ambBase.x - this.ambDir.x * 1.0, 0, this.ambBase.z - this.ambDir.z * 1.0); // where she rises / where she ends up in front of you
+    gh.state = 'ambush'; gh.hunting = false; gh.mesh.visible = true; gh.sink = 1.8; gh.mesh.scale.set(1, 1, 1); gh.pos.set(this.ambS.x, this.env.groundY(this.ambS.x, this.ambS.z), this.ambS.z); gh.yaw = Math.atan2(dx, dz); gh.light.intensity = 0.8;
+    this.ui.prompt(null, false); this.fx.splash(tr.pos.x, tr.pos.z, 10, 0.6); this.audio.gurgle(gh.pos); this.audio.splash(gh.pos, 2);
+  }
+  ambushUpdate(dt) { // she rises from the water, slaps you down (-50 HP), laughs, then dissolves
+    const t = (this.ambT += dt), gh = this.ghost, cam = this.camera, F = this.ambF, p = this.player, env = this.env;
+    const T_RISE = 1.1, T_LUNGE = 1.5, T_HIT = 1.85, T_LAUGH = 2.4, T_VAN = T_LAUGH + this.audio.laughShriekAt() + 1.3, T_END = T_VAN + 0.8, ez = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+    env.update(dt, p); this.fx.update(dt); for (const tr of this.traps) tr.update(dt); this.frogs.update(dt); this.audio.update(dt, p);
+    // ghost: rise -> lunge -> stand over you
+    const k = ez((t - T_RISE) / (T_LUNGE - T_RISE)); gh.pos.x = this.ambS.x + (this.ambH.x - this.ambS.x) * k; gh.pos.z = this.ambS.z + (this.ambH.z - this.ambS.z) * k; gh.pos.y = env.groundY(gh.pos.x, gh.pos.z);
+    gh.sink = 1.8 * (1 - ez(t / T_RISE)); gh.yaw = Math.atan2(this.ambBase.x - gh.pos.x, this.ambBase.z - gh.pos.z);
+    gh.mesh.position.set(gh.pos.x, gh.pos.y - gh.sink, gh.pos.z); gh.mesh.rotation.y = gh.yaw; gh.light.intensity = 0.9 + 0.4 * Math.sin(t * 30) * (t > T_HIT ? 1 : 0);
+    let act = 'stare', ges = null;
+    if (t >= T_RISE && t < T_LUNGE) act = 'run'; else if (t >= T_LAUGH) act = 'laugh';
+    if (t >= T_HIT - 0.2 && !F.slap) { F.slap = 1; ges = 'slap'; }
+    if (t < T_VAN + 0.5 || gh.mesh.visible) gh.ambPose(dt, act, ges);
+    if (t >= T_HIT && !F.hit) { F.hit = 1; this.hp = Math.max(5, this.hp - 50); this.hpRegenT = 10; this.audio.slap(gh.pos); this.audio.sting(0.8); this.ui.flash('#a00000', 1, 700); this.ui.toast('នាងទះអ្នក! ឈាមអស់ពាក់កណ្តាល · She slapped you down!', 2800); p.flicker(1.5); this.fx.splash(this.ambBase.x, this.ambBase.z, 6, 0.4); }
+    if (t >= T_LAUGH && !F.laugh) { F.laugh = 1; this.audio.laugh(gh.pos); }
+    // camera: watch her, get knocked to the ground, get back up
+    const fall = ez((t - T_HIT) / 0.4), up = ez((t - (T_VAN + 0.2)) / 0.8), kk = fall * (1 - up);
+    const tgt = t < T_HIT ? V3(gh.pos.x, 0.9 + 0.7 * ez(t / T_RISE), gh.pos.z) : V3(gh.pos.x, 1.55, gh.pos.z), eye = cam.position.clone();
+    const m = new THREE.Matrix4().lookAt(eye, tgt, V3(0, 1, 0)), qt = new THREE.Quaternion().setFromRotationMatrix(m); this.ambQ.slerp(qt, 1 - Math.exp(-dt * (t < T_HIT ? 5 : 3)));
+    const shake = t > T_HIT && t < T_HIT + 0.45 ? (1 - (t - T_HIT) / 0.45) * 0.07 : 0;
+    cam.position.set(this.ambBase.x - this.ambDir.x * 0.0 + this.ambDir.x * 0.8 * fall + rand(-shake, shake), this.ambBase.y - 1.15 * kk + rand(-shake, shake), this.ambBase.z + this.ambDir.z * 0.8 * fall + rand(-shake, shake));
+    cam.quaternion.copy(this.ambQ).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), 0.75 * kk));
+    if (t >= T_VAN) gh.mesh.visible = t < T_VAN + 0.5 ? Math.random() < 0.45 : false;
+    if (t >= T_END) { // back to normal play; you stay where she knocked you
+      p.pos.x += this.ambDir.x * 0.8; p.pos.z += this.ambDir.z * 0.8; cam.quaternion.copy(this.ambQ0);
+      gh.hide(); gh.sink = 0; gh.eventTimer = rand(25, 45); gh.huntCooldown = Math.max(gh.huntCooldown, 30);
+      const tr = this.ambTrap; if (tr && tr.state === 'caught') { tr.takeFish(); tr.state = 'idle'; tr.timer = rand(20, 40); }
+      this.ambushCool = 150; this.state = 'playing'; this.ui.flash('#000', 0, 1);
+    }
   }
   caughtUpdate(dt) {
     this.caughtT += dt; const t = this.caughtT, s = Math.max(0, 1 - t / 1.6) * 0.06, cam = this.camera;

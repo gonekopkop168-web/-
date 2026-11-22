@@ -13,7 +13,7 @@ export class AudioManager {
     this.master.connect(comp); comp.connect(c.destination);
     const n = c.sampleRate * 3; this.noiseBuf = c.createBuffer(1, n, c.sampleRate);
     const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    this.on = true; this._ambient(); this._ghostVoice();
+    this.on = true; this._ambient(); this._ghostVoice(); this.loadLaugh(); this.loadCry();
   }
   setVolume(v) { if (this.master) this.master.gain.value = v; }
   suspend() { if (this.ctx) this.ctx.suspend(); }
@@ -171,5 +171,25 @@ export class AudioManager {
   gurgle(pos) { for (let i = 0; i < 5; i++) this.tone({ f: rand(250, 500), f2: rand(600, 1000), dur: 0.12, vol: 0.09, pos, delay: i * rand(0.12, 0.25), lp: 1500 }); this.noise({ dur: 1.4, type: 'bandpass', freq: 400, freq2: 900, q: 1.5, vol: 0.12, pos, attack: 0.3 }); }
   scrape(pos) { this.noise({ dur: 1.3, type: 'bandpass', freq: 500, freq2: 250, q: 3, vol: 0.14, pos, attack: 0.3 }); this.tone({ f: 130, f2: 90, dur: 1.2, type: 'sawtooth', vol: 0.04, lp: 400, pos }); }
   fishJump(pos) { this.noise({ dur: 0.18, type: 'bandpass', freq: 1500, q: 1, vol: 0.12, pos }); this.splash(pos, 1); this.splash(pos, 0.5); }
+  sob(pos) { this.voice({ f0: 430, f1: 360, f2: 300, dur: 0.6, vol: 0.1, pos, vib: 20, formants: [800, 2200] }); this.voice({ f0: 400, f1: 340, f2: 290, dur: 0.45, vol: 0.08, pos, vib: 22, delay: 0.7, formants: [800, 2200] }); this.noise({ dur: 0.35, type: 'bandpass', freq: 1200, q: 1, vol: 0.04, pos, delay: 1.3 }); }
+  crack(pos) { this.noise({ dur: 0.05, type: 'bandpass', freq: 2200, q: 2, vol: 0.45, pos }); this.noise({ dur: 0.09, type: 'lowpass', freq: 420, vol: 0.4, pos, delay: 0.03 }); this.tone({ f: 170, f2: 70, dur: 0.1, vol: 0.3, pos, type: 'square', lp: 600 }); }
+  slap(pos) { this.noise({ dur: 0.18, type: 'bandpass', freq: 2600, freq2: 700, q: 0.8, vol: 0.5, pos }); this.tone({ f: 140, f2: 50, dur: 0.35, vol: 0.55, pos }); this.noise({ dur: 0.5, type: 'lowpass', freq: 500, vol: 0.35, pos, delay: 0.05 }); this.splash(pos, 1.2); }
+  loadCry() { // assets/cry.mp3 = the weeping woman's sobbing (loops while she sits on the dike)
+    if (this.cryBuf || this.cryLoading || !this.ctx) return; this.cryLoading = true;
+    fetch('assets/cry.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej))).then((buf) => { this.cryBuf = buf; }).catch((e) => { this.cryLoading = false; console.warn('[audio] cry.mp3 not loaded, using synthesized sobbing', e); });
+  }
+  weepStart(pos) { if (!this.on || !this.cryBuf || this.weepLoop) return; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(); s.buffer = this.cryBuf; s.loop = true; g.gain.value = 0.0001; g.gain.linearRampToValueAtTime(1.8, c.currentTime + 1.5); const pn = this._dest(pos); pn.refDistance = 5; pn.rolloffFactor = 0.6; s.connect(g); g.connect(pn); s.start(0, Math.random() * Math.max(0, this.cryBuf.duration - 1)); this.weepLoop = { s, g }; }
+  weepStop(fade = 1) { const w = this.weepLoop; if (!w) return; this.weepLoop = null; const c = this.ctx; try { w.g.gain.cancelScheduledValues(c.currentTime); w.g.gain.setValueAtTime(w.g.gain.value, c.currentTime); w.g.gain.linearRampToValueAtTime(0.0001, c.currentTime + fade); w.s.stop(c.currentTime + fade + 0.1); } catch (e) {} }
+  loadLaugh() { // assets/laugh.mp3 replaces the synthesized cackle (the final shriek stays procedural)
+    if (this.laughBuf || this.laughLoading || !this.ctx) return; this.laughLoading = true;
+    fetch('assets/laugh.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej))).then((buf) => { this.laughBuf = buf; }).catch((e) => { this.laughLoading = false; console.warn('[audio] laugh.mp3 not loaded, using synthesized laugh', e); });
+  }
+  laughShriekAt() { return this.laughBuf ? Math.max(1.5, this.laughBuf.duration - 0.4) : 2.5; } // when the closing shriek starts, seconds after the laugh starts
+  laugh(pos) {
+    if (!this.on) return; const c = this.ctx;
+    if (this.laughBuf) { const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.laughBuf; g.gain.value = 1.6; s.connect(g); g.connect(this._dest(pos)); s.start(); }
+    else for (let i = 0; i < 9; i++) { const up = 1 + i * 0.03; this.voice({ f0: 500 * up, f1: (600 + rand(-40, 60)) * up, f2: 340, dur: 0.26, vol: 0.17, pos, vib: 14, delay: i * 0.27, formants: [i % 2 ? 700 : 1100, 2600] }); this.voice({ f0: 250 * up, f1: 310 * up, f2: 170, dur: 0.28, vol: 0.09, pos, vib: 10, delay: i * 0.27 + 0.02, formants: [500, 1500] }); }
+    this.voice({ f0: 300, f1: 780, f2: 240, dur: 1.5, vol: 0.13, pos, vib: 34, delay: this.laughShriekAt() }); // the long shriek at the end (unchanged)
+  }
   win() { [262, 330, 392, 523].forEach((f, i) => this.tone({ f, dur: 2.2, vol: 0.1, attack: 0.3, delay: i * 0.35, lp: 1500 })); }
 }

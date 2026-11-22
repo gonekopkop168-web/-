@@ -43,3 +43,20 @@ Hand tuning (player.js): HAND_SCALE (size), HAND_Z (distance), ROLL_L / ROLL_R (
 
 ## Loading screen
 The loading screen is the FIRST screen (the world and 3D models build as soon as the page opens, then the menu appears). index.html #loading uses assets/loading.jpg with a running red line + percentage. The bar follows real progress (world build, then the ghost.glb download and arm models); the game starts after they are ready (max 40 s wait, then falls back).
+
+## Fake-fish ambush
+Sometimes (38% of eligible pulls, 150 s cooldown, never for the first fish) the thing thrashing in a trap is the ghost. When you pull it she rises from the water, slaps you to the ground (-50 HP, min 5), laughs, then dissolves; the trap is left empty. Tune in script.js: startAmbush / ambushUpdate (timeline constants T_*), trigger chance in interact('pull').
+
+Laugh sound: assets/laugh.mp3 (falls back to the synthesized laugh if it fails to load); the closing shriek stays procedural.
+
+## The weeping woman event
+assets/girl.glb (her living form, same Mixamo rig). Rarely (cooldown ~260 s, after 70 s outside, not during a hunt) she sits crying on a dike. Walk within ~4 m (you stay free to move): an on-screen line asks "យប់ជ្រៅហើយ តើអ្នកមកយំធ្វើអ្វីនៅកន្លែងនេះ?", she stands, turns to face you, wipes her tears, turns into the ghost, cracks her neck and hunts you (same HP/escape rules). Code: GhostAI.startWeeper + GameManager.startWeep/weepUpdate; poses sitcry/stand/wipe/gaze/neckcrack in ghostrig.js. Test from the console: game.ghost.startWeeper().
+
+Crying sound: assets/cry.mp3 loops (positional) while the weeping woman sits, fades when she stands; falls back to a synthesized sob.
+
+
+### កែកាយវិការស្ត្រីយំ
+អង្គុយយំ៖ ដៃទាំងពីរបិទមុខ ក្បាលឱន តូចៗញ័រ។ ក្រោកឈរ៖ ដៃឆ្វេងដាក់លើពោះ ដៃស្តាំទម្លាក់។ ជូតទឹកភ្នែក៖ ខ្នងដៃស្តាំជូតពីភ្នែកមកថ្ពាល់។ (គណនាដោយ IK លើ skeleton ពិត)
+
+- ស្ត្រីយំ (កែលើកទី២)៖ អង្គុយគូទដល់ដី ជង្គង់លើក បាតដៃបិទមុខដោយមិនលិច (ត្រួតពិនិត្យជាមួយ mesh ពិត គម្លាត ≥ 2 សង់ទីម៉ែត្រ)។ ជូតទឹកភ្នែក៖ ដៃស្តាំអូសពីភ្នែកទៅថ្ពាល់ ដោយមិនប៉ះមុខ។ ពេលប្រែជាខ្មោច៖ ឈរក្នុងកាយវិការចុងក្រោយ ១វិនាទី រួចទើបកាច់កឆ្វេង-ស្តាំ (គ្មានលោតរាងកាយ គ្មានលើកដៃ)។
+- ប្រែកាយ៖ ផ្សែងខ្មៅហុយឡើងព័ទ្ធជុំវិញនាងចាប់ពីវិនាទីទី ៨.៩ បិទបាំងពេលប្តូរជារូបខ្មោច រួចរសាត់បាត់ (FX.smokeOn ក្នុង environment.js)។

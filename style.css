@@ -200,3 +200,9 @@ body.q-medium #game,body.q-high #game{filter:contrast(1.1) saturate(.85) brightn
 @keyframes rotPh{0%,25%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
 @media (orientation:portrait) and (pointer:coarse){#rotateMsg{display:flex}}
 .loadTap{margin:12px 0 0;font-size:11px;letter-spacing:.08em;color:#e02433;opacity:.85;animation:loadFade 2.2s ease-in-out infinite}
+
+/* typed dialogue line */
+#dialog{position:fixed;left:50%;bottom:19%;transform:translateX(-50%);width:min(780px,90vw);text-align:center;z-index:40;pointer-events:none;opacity:0;transition:opacity .35s}
+#dialog.show{opacity:1}
+#dialog b{display:block;font-family:'Noto Sans Khmer',sans-serif;font-weight:700;font-size:clamp(18px,3.4vw,28px);line-height:1.6;color:#f1ede4;text-shadow:0 2px 0 #000,0 0 16px rgba(224,36,51,.55),0 0 30px #000;min-height:1.6em}
+#dialog small{display:block;margin-top:2px;font-size:clamp(11px,1.7vw,14px);color:#9a9ea1;font-style:italic;text-shadow:0 1px 0 #000}

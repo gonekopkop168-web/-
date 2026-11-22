@@ -270,7 +270,13 @@ export class Environment {
 // ---------- water ripples + splashes ----------
 export class FX {
   constructor(game) {
-    this.s = game.scene; this.rings = []; this.drops = [];
+    this.s = game.scene; this.rings = []; this.drops = []; this.puffs = []; this.sm = null;
+    let tex = null; try { // soft, uneven black smoke blob
+      const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      for (let i = 0; i < 9; i++) { const px = 32 + (Math.random() - 0.5) * 22, py = 32 + (Math.random() - 0.5) * 22, r = 14 + Math.random() * 12, g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); }
+      tex = new THREE.CanvasTexture(c);
+    } catch (e) { tex = null; }
+    for (let i = 0; i < (game.low ? 60 : 110); i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x07070a, transparent: true, opacity: 0, depthWrite: false })); sp.visible = false; this.s.add(sp); this.puffs.push({ sp, on: false, t: 0, life: 1, v: V3(), s0: 1, s1: 2, rot: 0, rv: 0 }); }
     const rg = new THREE.RingGeometry(0.82, 1, 28); rg.rotateX(-Math.PI / 2);
     for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xaec4d0, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; this.s.add(m); this.rings.push({ m, t: 0, life: 1, max: 1, on: false }); }
     const dg = new THREE.SphereGeometry(0.03, 5, 4);
@@ -284,7 +290,29 @@ export class FX {
     for (let i = 0; i < n; i++) { const d = this.drops.find(d => !d.on); if (!d) break; d.on = true; d.m.visible = true; d.m.position.set(x + rand(-0.1, 0.1), WATER_Y, z + rand(-0.1, 0.1)); d.v.set(rand(-1, 1) * 1.2, rand(2, 3.5) * power, rand(-1, 1) * 1.2); }
   }
   drip(x, y, z) { const d = this.drops.find(d => !d.on); if (!d) return; d.on = true; d.m.visible = true; d.m.position.set(x + rand(-0.15, 0.15), y, z + rand(-0.15, 0.15)); d.v.set(rand(-0.2, 0.2), rand(-0.5, 0.3), rand(-0.2, 0.2)); }
+  // black smoke column around a spot (used when the weeping woman turns into the ghost): builds up for `up` seconds, then pours until `dur`
+  smokeOn(x, y, z, dur = 3, up = 0.8, h = 1.8) { this.sm = { x, y, z, t: 0, dur, up, h, acc: 0 }; }
   update(dt) {
+    const sm = this.sm;
+    if (sm) {
+      sm.t += dt;
+      if (sm.t >= sm.dur) this.sm = null;
+      else {
+        const ramp = Math.min(1, sm.t / sm.up), fade = Math.min(1, (sm.dur - sm.t) / 0.9); sm.acc += dt * 85 * ramp * Math.max(0.15, fade);
+        while (sm.acc >= 1) {
+          sm.acc -= 1; const p = this.puffs.find(q => !q.on); if (!p) { sm.acc = 0; break; }
+          const a = rand(0, 6.283), r = rand(0.05, 0.4);
+          p.on = true; p.t = 0; p.life = rand(1.1, 1.9); p.s0 = rand(0.35, 0.6); p.s1 = rand(1.3, 2.0) * (0.6 + 0.4 * ramp); p.rot = rand(0, 6.28); p.rv = rand(-0.8, 0.8); p.peak = 0.55 + 0.35 * ramp;
+          p.v.set(Math.cos(a) * rand(0.1, 0.5), rand(0.4, 1.2), Math.sin(a) * rand(0.1, 0.5));
+          p.sp.position.set(sm.x + Math.cos(a) * r, sm.y + rand(0, sm.h), sm.z + Math.sin(a) * r); p.sp.visible = true;
+        }
+      }
+    }
+    for (const p of this.puffs) if (p.on) {
+      p.t += dt; const k = p.t / p.life; if (k >= 1) { p.on = false; p.sp.visible = false; continue; }
+      p.sp.position.addScaledVector(p.v, dt); p.v.multiplyScalar(1 - 0.6 * dt); p.v.x += Math.sin(p.t * 3 + p.rot) * dt * 0.5; p.sp.scale.setScalar(p.s0 + (p.s1 - p.s0) * Math.sqrt(k));
+      p.rot += p.rv * dt; p.sp.material.rotation = p.rot; p.sp.material.opacity = p.peak * Math.min(1, k / 0.15) * (1 - k) ** 1.3;
+    }
     for (const r of this.rings) if (r.on) { r.t += dt; const k = r.t / r.life; if (k >= 1) { r.on = false; r.m.visible = false; continue; } const s = 0.1 + (r.max - 0.1) * (1 - (1 - k) * (1 - k)); r.m.scale.set(s, 1, s); r.m.material.opacity = 0.5 * (1 - k); }
     for (const d of this.drops) if (d.on) { d.v.y -= 9 * dt; d.m.position.addScaledVector(d.v, dt); if (d.m.position.y < WATER_Y) { d.on = false; d.m.visible = false; } }
   }

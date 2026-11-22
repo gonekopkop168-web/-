@@ -44,8 +44,8 @@ export function buildGhostMesh() {
   U.body.scale.set(1.08, 1.13, 1.08); g.userData = U; return g;
 }
 
-const GLB_URL = 'assets/ghost.glb?v=3', GLB_TEX = IS_TOUCH ? 512 : 1024;
-GhostRig.preload(GLB_URL, 1.9, GLB_TEX).catch((e) => console.warn('[ghost] preload failed, will retry', e)); // start downloading while the menu is open
+const GIRL_URL = 'assets/girl.glb?v=1', GLB_URL = 'assets/ghost.glb?v=3', GLB_TEX = IS_TOUCH ? 512 : 1024;
+GhostRig.preload(GLB_URL, 1.9, GLB_TEX).catch((e) => console.warn('[ghost] preload failed, will retry', e)); GhostRig.preload(GIRL_URL, 1.62, GLB_TEX, false).catch(() => {}); // start downloading while the menu is open
 export class GhostAI {
   constructor(game) {
     this.g = game; this.mesh = new THREE.Group(); this.proc = buildGhostMesh(); this.mesh.add(this.proc); this.mesh.visible = false; game.scene.add(this.mesh);
@@ -53,15 +53,30 @@ export class GhostAI {
     this._f = V3(); this._v = V3(); this.pos = V3(); this.reset();
   }
   loadRig() { // called by the game AFTER the world is built, so a heavy model can never block the loading screen
-    if (this.rig) return Promise.resolve(); if (this.loadP) return this.loadP; const game = this.g;
-    return this.loadP = GhostRig.preload(GLB_URL, 1.9, GLB_TEX).then((r) => { this.rig = r; this.mesh.add(r.root); this.proc.visible = false; console.log('[ghost] 3D rigged model loaded'); game.ui.toast('👻 3D ghost model loaded', 2500); })
+    if (this.rig && this.girl) return Promise.resolve(); if (this.loadP) return this.loadP; const game = this.g;
+    const gp = GhostRig.preload(GIRL_URL, 1.62, GLB_TEX, false).then((r) => { this.girl = r; this.mesh.add(r.root); r.root.visible = false; console.log('[ghost] weeping-woman model loaded'); }).catch((e) => console.warn('[ghost] girl.glb failed (weeper event disabled)', e));
+    const rp = GhostRig.preload(GLB_URL, 1.9, GLB_TEX).then((r) => { this.rig = r; this.mesh.add(r.root); this.proc.visible = false; console.log('[ghost] 3D rigged model loaded'); game.ui.toast('👻 3D ghost model loaded', 2500); })
       .catch((e) => { this.loadP = null; this.tries = (this.tries || 0) + 1; if (this.tries < 3) setTimeout(() => this.loadRig(), 4000); console.error('[ghost] ghost.glb FAILED to load – using old procedural ghost:', e); game.ui.toast('⚠ ghost.glb មិនផ្ទុក: ' + (e && e.message ? e.message : e), 9000); });
+    return this.loadP = Promise.all([rp, gp]).then(() => {});
+  }
+  // ---- the weeping woman: she sits crying on a dike; when you come close she asks to be spoken to, stands, wipes her tears, then turns into the ghost and hunts you ----
+  setForm(f) { if (this.rig) this.rig.root.visible = f === 'ghost'; if (this.girl) this.girl.root.visible = f === 'girl'; this.proc.visible = f === 'ghost' && !this.rig; }
+  startWeeper() {
+    const g = this.g, p = g.player.pos; if (!this.girl) { this.eventTimer = 6; return false; }
+    const s = this.findSpot(16, 26, 'path'); if (!s || !g.env.isDry(s.x, s.z)) { this.eventTimer = 5; return false; }
+    this.put(s.x, s.z); this.setForm('girl'); this.state = 'weeper'; this.age = 0; this.sobT = 0.4; this.wAct = 'sitcry'; this.wFade = 0.2; this.wRig = 'girl'; this.wBob = 0; this.wScale = 1; this.wLight = 0.7; this.sink = 0; this.mesh.visible = true; this.mesh.scale.set(1, 1, 1);
+    this.yaw = Math.atan2(p.x - this.pos.x, p.z - this.pos.z) + 2.2; this.light.intensity = 0.7; return true;
+  }
+  weepAnimate(dt) {
+    const m = this.mesh; m.position.set(this.pos.x, this.pos.y + (this.wBob || 0), this.pos.z); m.rotation.y = this.yaw; m.scale.setScalar(this.wScale || 1);
+    const r = this.wRig === 'ghost' ? this.rig : this.girl; if (r) { try { r.play(this.wAct, this.wFade); r.update(dt); } catch (e) { console.warn('weep rig error', e); } }
+    this.light.intensity = this.wLight == null ? 0.25 : this.wLight;
   }
   reset() {
-    this.state = 'dormant'; this.mesh.visible = false; this.mesh.position.set(0, -50, 0); this.mesh.scale.set(1, 1, 1); this.hunting = false; this.light.intensity = 0; this.wounded = false; this.stagger = 0;
+    if (this.g.audio) this.g.audio.weepStop(0.1); this.state = 'dormant'; this.mesh.visible = false; this.mesh.position.set(0, -50, 0); this.mesh.scale.set(1, 1, 1); this.hunting = false; this.light.intensity = 0; this.wounded = false; this.stagger = 0;
     this.eventTimer = rand(30, 45); this.huntCooldown = 0; this.outside = 0; this.seenFirst = false; this.huntTime = 0; this.rushTime = 0; this.siege = 0; this.age = 0; this.lookT = 0;
     this.sink = 0; this.sub = 'stare'; this.awayT = 0; this.pendingT = 0; this.pendingFn = null; this.hideT = 0; this.hideCool = 8; this.vanishT = 0; this.then = null; this.jerkT = 1; this.frozen = 0; this.farT = 0; this.knockT = 0; this.stuckT = 0; this.stagger = 0; this.escapeT = 0; this.wounded = false;
-    this.yaw = 0; this.anim = 0; this.poseT = 0; this.headT = V3(); this.surprise = false; this.maxAge = 12; this.vanishOnLook = true; this.threat = 0; this.firstHunt = false;
+    this.yaw = 0; this.anim = 0; this.poseT = 0; this.headT = V3(); this.surprise = false; this.maxAge = 12; this.vanishOnLook = true; this.threat = 0; this.firstHunt = false; this.firstWeeper = false;
   }
   get dist() { const p = this.g.player.pos; return Math.hypot(this.pos.x - p.x, this.pos.z - p.z); }
 
@@ -95,18 +110,20 @@ export class GhostAI {
     this.faceTo(target, dt, 6);
   }
   vanishThen(fn) { this.state = 'vanishing'; this.vanishT = 0.4; this.then = fn; }
-  hide() { this.show(false); this.state = 'dormant'; this.sink = 0; }
+  hide() { this.g.audio.weepStop(0.3); this.show(false); this.state = 'dormant'; this.sink = 0; this.wBob = 0; this.wScale = 1; this.mesh.scale.set(1, 1, 1); this.setForm('ghost'); }
 
   // ---- event scheduling ----
   roll() {
     const g = this.g, pl = g.player, ev = g.events, ten = clamp(this.outside / 240, 0, 1), inside = pl.inHouse, o = this.outside;
     if (!inside && !this.seenFirst && o > 28) { this.seenFirst = true; this.run('distant'); return; }
+    if (!inside && !this.firstWeeper && o > 55 && this.girl && this.huntCooldown <= 0 && ev.ready('weeper')) { this.run('weeper'); return; } // guaranteed first meeting with the weeping woman
     if (!inside && !this.firstHunt && o > 130 && this.huntCooldown <= 0) { this.firstHunt = true; this.run('hunt'); return; }
     let items = inside ? [{ k: 'cry', w: 2 }, { k: 'whisper', w: 2 }, { k: 'steps', w: 1 }, { k: 'breath', w: 1.5 }, { k: 'flicker', w: 2 }, { k: 'knock', w: 1 }, { k: 'canal', w: 1 }]
       : [{ k: 'cry', w: 2.5 }, { k: 'whisper', w: 2 }, { k: 'steps', w: 2 }, { k: 'breath', w: 1.5 }, { k: 'rice', w: 2 }, { k: 'flicker', w: 1.5 }, { k: 'canal', w: 1.5 },
         { k: 'shadow', w: 1.6 }, { k: 'fishjump', w: 1.6 }, { k: 'distant', w: 2.4 }, { k: 'path', w: 2 }, { k: 'tree', w: 1.6 }, { k: 'watch', w: 2 }, { k: 'ricehide', w: 1.6 }];
     if (!inside && g.traps.length) items.push({ k: 'trapmove', w: 1.2 });
     if (!inside && o > 40) items.push({ k: 'behind', w: 1.4 });
+    if (!inside && o > 70 && this.girl && this.huntCooldown <= 0) items.push({ k: 'weeper', w: 2.6 });
     if (!inside && o > 60) items.push({ k: 'creep', w: 1.3 });
     if (!inside && o > 50 && this.huntCooldown <= 0) items.push({ k: 'hunt', w: 0.8 + ten * 2.5 });
     items = items.filter(i => ev.ready(i.k)); if (!items.length) { this.eventTimer = 6; return; }
@@ -135,6 +152,7 @@ export class GhostAI {
         g.camera.getWorldDirection(this._f); au.whisper({ x: p.x - this._f.x * 1.5, y: 1.5, z: p.z - this._f.z * 1.5 });
         this.state = 'pending'; this.pendingT = 1.7; this.pendingFn = () => this.appear('back', 6, 9, 'behind'); break; }
       case 'hunt': this.startHunt(); break;
+      case 'weeper': if (this.startWeeper()) this.firstWeeper = true; break;
     }
   }
   appear(mode, a, b, sub = 'stare') {
@@ -174,6 +192,10 @@ export class GhostAI {
     const d = this.dist, doorClosed = !g.env.door.open;
     switch (this.state) {
       case 'dormant': this.eventTimer -= dt; if (this.eventTimer <= 0) this.roll(); break;
+      case 'weeper': {
+        this.age += dt; this.sobT -= dt; if (!g.audio.weepLoop) g.audio.weepStart(this.pos); if (!g.audio.weepLoop && this.sobT <= 0) { this.sobT = rand(1.8, 2.6); g.audio.sob(this.pos); }
+        if (pl.inHouse || d > 58 || this.age > 90) { this.hide(); this.eventTimer = rand(20, 40); break; }
+        if (d < 4.3 && g.state === 'playing') g.startWeep(); break; }
       case 'pending': this.pendingT -= dt; if (this.pendingT <= 0) { const f = this.pendingFn; this.pendingFn = null; this.state = 'dormant'; this.eventTimer = rand(14, 30); f && f(); } break;
       case 'appear': {
         this.age += dt; this.faceTo(p, dt, 2); const seen = this.looking(75), sub = this.sub; this.lookT = seen ? this.lookT + dt : Math.max(0, this.lookT - dt * 0.5);
@@ -246,11 +268,16 @@ export class GhostAI {
     if (s === 'appear' && this.sub === 'creep') return this.looking(75) ? 'stare' : 'creep'; return 'stare';
   }
   animateRig(dt, action) { try { this.rig.play(action); this.rig.update(dt, { speed: this.curSp || 0 }); } catch (e) { console.warn('ghost rig error, falling back', e); this.mesh.remove(this.rig.root); this.rig = null; this.proc.visible = true; } }
+  ambPose(dt, action, gesture) { // driven by GameManager.ambushUpdate (the "fake fish" ambush)
+    if (this.rig) { if (gesture) this.rig.gesture(gesture, 0.5); this.animateRig(dt, action); return; }
+    this.U.head.rotation.x = action === 'laugh' ? -0.7 : 0; this.U.armR.sh.rotation.x = gesture === 'slap' ? -1.6 : this.U.armR.sh.rotation.x;
+  }
   scareAnim(dt, t) { // used by the jumpscare camera
     if (this.rig) { this.animateRig(dt, 'jumpscare'); if (this.rig && t > 0.15 && t - dt <= 0.15) this.rig.gesture('headSnap', 0.5); return; }
     this.anim += dt; this.U.head.rotation.z = Math.sin(t * 45) * 0.35; this.U.mouth.scale.y = 5 + Math.sin(t * 30);
   }
   animate(dt) {
+    if (this.state === 'weeper' || this.state === 'weepx') return this.weepAnimate(dt);
     const U = this.U, m = this.mesh, t = this.anim, rush = this.state === 'rush', hid = this.state === 'hide';
     m.position.set(this.pos.x, this.pos.y - this.sink, this.pos.z); m.rotation.y = this.yaw; m.scale.y = hid && !this.rig ? 0.8 : m.scale.x;
     if (this.rig) { this.animateRig(dt, this.rigAction()); this.curSp = 0; this.light.intensity = this.mesh.visible ? 0.4 + (rush ? 0.5 : 0) : 0; if (this.rig) return; }

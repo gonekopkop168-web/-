@@ -24,6 +24,11 @@ export class UIManager {
     document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => game.audio.click && game.audio.click()));
     this.grain();
   }
+  say(kh, en, ms = 4000) { // on-screen line that "types" itself
+    const box = $('dialog'), a = $('dlgKh'), b = $('dlgEn'); clearInterval(this._dt); clearTimeout(this._dh);
+    const seg = window.Intl && Intl.Segmenter ? [...new Intl.Segmenter('km', { granularity: 'grapheme' }).segment(kh)].map(x => x.segment) : Array.from(kh); a.textContent = ''; b.textContent = en || ''; box.classList.add('show'); let i = 0;
+    this._dt = setInterval(() => { a.textContent = seg.slice(0, ++i).join(''); if (i >= seg.length) clearInterval(this._dt); }, 70); this._dh = setTimeout(() => box.classList.remove('show'), ms);
+  }
   loadProgress(p, text) { // horror loading screen: running line + percentage
     p = Math.max(0, Math.min(100, p)); this.lp = Math.max(this.lp || 0, p); if (text) $('loadText').textContent = text;
     if (!this._lt) { const tip = ['កុំសម្លឹងមើលនាងយូរពេក… Do not stare at her for long', 'ដូនតាស្រែ នៅតែមើលអ្នក… The field is watching', 'បិទពិល ពេលឮសំឡេង… Kill the light when you hear it', 'រត់ទៅផ្ទះ… If she runs, you run', 'ទឹកស្រែនៅពេលយប់ មិនមែនស្ងាត់ទេ… The water is never quiet'];
