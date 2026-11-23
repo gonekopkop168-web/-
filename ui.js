@@ -21,7 +21,6 @@ export class UIManager {
     $('btnRetry').onclick = () => game.startNewGame(); $('btnDeadMenu').onclick = () => game.toMenu();
     $('btnPlayAgain').onclick = () => game.startNewGame(); $('btnWinMenu').onclick = () => game.toMenu();
     $('introSkip').onclick = () => game.skipIntro(); $('intro').addEventListener('pointerdown', () => game.skipIntro());
-    document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => game.audio.click && game.audio.click()));
     this.grain();
   }
   say(kh, en, ms = 4000) { // on-screen line that "types" itself

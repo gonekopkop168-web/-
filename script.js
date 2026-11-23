@@ -58,10 +58,11 @@ class GameManager {
   async startNewGame() {
     this.goFullscreen(); this.audio.init(); this.audio.resume(); this.ui.hideAll(); this.lockPointer();
     if (!this.built) { this.ui.show('loading'); await this.build(); }
-    this.resetWorld(); this.beginIntro();
+    try { this.resetWorld(); } catch (e) { console.error('[game] resetWorld failed, continuing', e); } // never get stuck on a restart
+    this.beginIntro();
   }
   resetWorld() {
-    for (const t of this.traps) t.dispose(); this.traps = []; this.fishCollected = 0; this.trapsPlacedTotal = 0; this.fishByType = {}; this.time = 0; this.hudT = 0;
+    for (const t of this.traps) { try { t.dispose(); } catch (e) { console.warn(e); } } this.traps = []; this.fishCollected = 0; this.trapsPlacedTotal = 0; this.fishByType = {}; this.time = 0; this.hudT = 0;
     this.hp = 100; this.hpRegenT = 0; this.ambushCool = 60; this.weeping = false; this.player.reset(); this.ghost.reset(); this.fishSys.reset(); this.events.reset(); this.frogs.reset(); this.threat = 0;
     this.env.door.open = false; this.env.door.t = 0; this.env.door.col.active = true;
     for (const it of this.env.houseItems) if (it.mesh) { it.mesh.visible = true; it.taken = false; }
@@ -168,9 +169,9 @@ class GameManager {
     switch (it.type) {
       case 'door': {
         const d = this.env.door;
-        if (!d.open) { d.open = true; au.door({ x: 0, y: 2, z: 3 }); } else {
+        if (!d.open) { d.open = true; au.doorOpen({ x: 0, y: 2, z: 3 }); } else {
           if (Math.abs(p.pos.z - 3) < 0.9 && Math.abs(p.pos.x) < 1.1 || (this.ghost.mesh.visible && Math.hypot(this.ghost.pos.x, this.ghost.pos.z - 3) < 1.4)) return ui.toast('Something is in the way.', 1500);
-          d.open = false; au.door({ x: 0, y: 2, z: 3 });
+          d.open = false; au.doorClose({ x: 0, y: 2, z: 3 });
         } break;
       }
       case 'flash': p.hasFlashlight = true; it.taken = true; it.mesh.visible = false; p.hand.visible = true; p.flashOn = true; au.pickup(); ui.toast('Flashlight taken. Press F to toggle it.', 3500); break;
@@ -236,7 +237,7 @@ class GameManager {
     const it = this.findInteractable(); let showPrev = false;
     if (it) this.ui.prompt(this.promptFor(it), true);
     else if (p.carried > 0 && !p.inHouse) { const s = this.placementSpot(); showPrev = true; this.previewMesh.position.set(s.x, WATER_Y + 0.02, s.z); this.previewMesh.rotation.y = s.yaw; this.previewMesh.material.color.setHex(s.ok ? 0x55ff77 : 0xff4444);
-      this.ui.prompt(s.ok ? `<kbd>${IS_TOUCH ? 'TRAP' : 'E / Click'}</kbd>Place trap` : null, s.ok); }
+      this.ui.prompt(s.ok ? `<kbd>${IS_TOUCH ? 'E' : 'E / Click'}</kbd>Place trap` : null, s.ok); }
     else this.ui.prompt(null, false);
     this.previewMesh.visible = showPrev;
     // win condition

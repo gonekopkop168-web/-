@@ -121,7 +121,7 @@ export class FishingTrap {
     } else this.timer = rand(14, 35);
   }
   takeFish() { const type = this.fishType; if (this.fishMesh) this.mesh.remove(this.fishMesh); this.fishMesh = null; this.fishType = null; return type; }
-  dispose() { this.g.scene.remove(this.mesh); this.mesh.traverse(o => { if (o !== this.mesh) o.parent && o.parent.remove(o); }); }
+  dispose() { this.g.scene.remove(this.mesh); if (this.fishMesh) { this.mesh.remove(this.fishMesh); this.fishMesh = null; } } // (the old version removed children while traverse() was iterating them, which threw when a trap still held a fish -> restart after winning hung)
 }
 
 class Fish {

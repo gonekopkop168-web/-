@@ -43,7 +43,7 @@ export class PlayerController {
   toggleFlash() {
     if (!this.hasFlashlight) { this.g.ui.toast('You need to find the flashlight first.', 2200); return; }
     if (this.battery <= 0) { this.g.ui.toast('The battery is dead. Replace it at the table.', 2500); return; }
-    this.flashOn = !this.flashOn; this.g.audio.click();
+    this.flashOn = !this.flashOn; this.g.audio.flashSfx();
   }
 
   bindKeys() {
@@ -66,7 +66,8 @@ export class PlayerController {
       knob.style.transform = `translate(${dx}px,${dy}px)`; this.joy.x = dx / m; this.joy.y = -dy / m; });
     const jend = (e) => { if (e.pointerId !== jid) return; jid = null; this.joy.x = this.joy.y = 0; knob.style.transform = ''; };
     joyZ.addEventListener('pointerup', jend); joyZ.addEventListener('pointercancel', jend);
-    look.addEventListener('pointerdown', (e) => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(lid); });
+    look.addEventListener('pointerdown', (e) => { const pb = document.getElementById('btnPause'); if (pb) { const q = pb.getBoundingClientRect(), m = 10; if (e.clientX >= q.left - m && e.clientX <= q.right + m && e.clientY >= q.top - m && e.clientY <= q.bottom + m) { e.preventDefault(); this.g.pause(); return; } } // the look zone sits on top of the pause button, so forward taps there
+      lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(lid); });
     look.addEventListener('pointermove', (e) => { if (e.pointerId !== lid) return; this.look.x += e.clientX - lx; this.look.y += e.clientY - ly; lx = e.clientX; ly = e.clientY; });
     const lend = (e) => { if (e.pointerId === lid) lid = null; }; look.addEventListener('pointerup', lend); look.addEventListener('pointercancel', lend);
     const btn = (id, down, up) => { const b = $(id); const d = (e) => { e.preventDefault(); b.classList.add('held'); down && down(); }; const u = (e) => { e.preventDefault(); b.classList.remove('held'); up && up(); };
@@ -74,7 +75,7 @@ export class PlayerController {
     const g = this.g, pl = () => g.state === 'playing';
     btn('tRun', () => { this.runHeld = true; }, () => { this.runHeld = false; });
     btn('tJump', () => { if (pl()) this.keys.Space = true; }, () => { this.keys.Space = false; });
-    btn('tAct', () => { if (pl()) g.interact(); }); btn('tLight', () => { if (pl()) this.toggleFlash(); }); btn('tTrap', () => { if (pl()) g.placeTrap(); });
+    btn('tAct', () => { if (pl()) g.interact(); }); btn('tLight', () => { if (pl()) this.toggleFlash(); });
   }
 
   update(dt) {

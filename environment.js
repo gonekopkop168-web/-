@@ -1,9 +1,10 @@
 // environment.js – rice-field world, collision, sky, fog, fireflies, FX
 import {
   THREE, V3, rand, clamp, pick, lerp, settings, colored, woodTexture, mudTexture, glowTexture, fogTexture, waterNormalTexture, moonEnvTexture,
-  HALF, DIKES, DIKE_HW, FLOOR_Y, DRY_Y, MUD_Y, WATER_Y, HOUSE,
+  HALF, DIKES, DIKE_HW, FLOOR_Y, DRY_Y, MUD_Y, WATER_Y, HOUSE, IS_TOUCH,
 } from './core.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeTrapMesh } from './fishing.js';
 import { buildHouse } from './house.js';
 
@@ -192,7 +193,8 @@ export class Environment {
       ...[[0, 4.6, 0, 2.2], [1.4, 4.1, 0.5, 1.6], [-1.3, 4.3, -0.6, 1.7], [0.2, 5.5, 0.9, 1.4]].map(([x, y, z, r]) => colored(new THREE.IcosahedronGeometry(r, 1).translate(x, y, z), 0x1d3318))]);
     const lists = { palm0: [], palm1: [], palm2: [], banana: [], bush: [], old: [] };
     const geos = { palm0: palm(0.8, 6.5, 0), palm1: palm(-1.3, 8, 1), palm2: palm(0.4, 7.2, 2), banana: banana(), bush, old: oldTree };
-    const add = (kind, x, z, col = true) => { lists[kind].push({ x, z, s: rand(0.9, 1.25), r: rand(0, 6.28) }); if (col && kind !== 'bush') { const c = { x, z, r: kind === 'old' ? 0.6 : 0.38 }; this.circles.push(c); this.trees.push(c); } };
+    this.treeSlots = []; this.treeIM = {};
+    const add = (kind, x, z, col = true) => { const tr = { x, z, s: rand(0.9, 1.25), r: rand(0, 6.28) }; if (kind !== 'bush') this.treeSlots.push({ kind, grp: kind.startsWith('palm') ? 'palm' : kind, idx: lists[kind].length, v: Math.random() < 0.5 ? 0 : 1, ...tr, on: false }); lists[kind].push(tr); if (col && kind !== 'bush') { const c = { x, z, r: kind === 'old' ? 0.6 : 0.38 }; this.circles.push(c); this.trees.push(c); } };
     const offLimit = (x, z) => this.inHouseXZ(x, z, 2.5) || (Math.abs(x) < 1.8 && z > 0 && z < 10) || this.inCanal(x, z) || Math.abs(x) > HALF - 2 || Math.abs(z) > HALF - 3 || dikeDist(x) < 1.1 || dikeDist(z) < 1.1;
     // yard
     for (let i = 0, n = 0; i < 80 && n < 11; i++) { const x = rand(-9, 9), z = rand(-9, 9); if (this.inHouseXZ(x, z, 2.5) || (Math.abs(x) < 1.8 && z > 0) || Math.abs(x) > 8.6) continue; add(pick(['palm0', 'palm1', 'palm2', 'banana', 'banana', 'old']), x, z); n++; }
@@ -210,13 +212,69 @@ export class Environment {
     const aoIm = new THREE.InstancedMesh(aoG, aoMat, 420); let aoN = 0; const am = new THREE.Matrix4();
     for (const k in lists) for (const t of lists[k]) if (aoN < 420 && k !== 'bush') { const sz = k === 'old' ? 5 : k === 'banana' ? 3 : 2.6; am.makeScale(sz, 1, sz).setPosition(t.x, this.groundY(t.x, t.z) + 0.02, t.z); aoIm.setMatrixAt(aoN++, am); }
     am.makeScale(11, 1, 9).setPosition(0, 0.33, 0); aoIm.setMatrixAt(aoN++, am); aoIm.count = aoN; aoIm.frustumCulled = false; this.scene.add(aoIm);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }), m4 = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = V3(0, 1, 0);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }), _w = this.windify(mat, 0.13, 7.5), m4 = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = V3(0, 1, 0);
     for (const k in lists) {
       if (!lists[k].length) continue; const im = new THREE.InstancedMesh(geos[k], mat, lists[k].length);
       lists[k].forEach((t, i) => { qt.setFromAxisAngle(up, t.r); m4.compose(V3(t.x, this.groundY(t.x, t.z), t.z), qt, V3(t.s, t.s, t.s)); im.setMatrixAt(i, m4); });
-      im.frustumCulled = false; im.castShadow = q !== 'low'; this.scene.add(im);
+      im.frustumCulled = false; im.castShadow = q !== 'low'; this.scene.add(im); this.treeIM[k] = im;
+    }
+    this.loadTreeModels(); // your real banana / mango models take over near the player (loads in the background; the generated trees stay if it fails)
+  }
+
+  // gentle wind sway done on the GPU (no extra draw calls): the higher and farther from the trunk a point is, the more it moves; gusts (riceU.uGust) make it stronger
+  windify(mat, amp, H) {
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = this.riceU.uTime; sh.uniforms.uGust = this.riceU.uGust; sh.uniforms.uAmp = { value: amp }; sh.uniforms.uH = { value: H };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uGust; uniform float uAmp; uniform float uH;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        { float hh = clamp(position.y / uH, 0.0, 1.0); float rr = clamp(length(position.xz) / (uH * 0.45), 0.0, 1.0);
+          float w = hh * hh * (0.35 + 0.65 * rr);
+          #ifdef USE_INSTANCING
+            float ph = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.53;
+          #else
+            float ph = 0.0;
+          #endif
+          float k = uAmp * w * (1.0 + uGust * 1.8);
+          transformed.x += (sin(uTime * 1.25 + ph + position.y * 1.7) + 0.35 * sin(uTime * 3.1 + ph * 1.7 + position.x * 9.0 / uH)) * k;
+          transformed.z += (cos(uTime * 1.05 + ph * 1.3 + position.y * 1.3) + 0.35 * sin(uTime * 2.7 + ph + position.z * 9.0 / uH)) * k * 0.75; }`);
+    };
+    mat.customProgramCacheKey = () => 'wind' + amp.toFixed(3) + '_' + H.toFixed(2); mat.needsUpdate = true;
+  }
+  // ---------- real tree models (banana_a/b, mango_a/b): used only for the trees close to the player, the generated ones stay far away ----------
+  async loadTreeModels() {
+    if (!this.treeSlots.length || this.treeLod) return;
+    const q = this.q, loader = new GLTFLoader(), cap = q === 'low' ? 5 : 10, R = q === 'low' ? 28 : 42;
+    const defs = [['banana', 'assets/banana_a.glb?v=1', 5.4], ['banana', 'assets/banana_b.glb?v=1', 5.4], ['old', 'assets/mango_a.glb?v=1', 7.4], ['old', 'assets/mango_b.glb?v=1', 7.0], ['palm', 'assets/palm_a.glb?v=1', 7.8], ['palm', 'assets/palm_b.glb?v=1', 7.2]];
+    try {
+      const vs = [], cnt = { banana: 0, old: 0, palm: 0 };
+      for (const [kind, url, H] of defs) {
+        const g = await loader.loadAsync(url); let mesh = null; g.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; }); if (!mesh) throw new Error('no mesh in ' + url);
+        const mat = mesh.material; mat.side = THREE.DoubleSide; mat.roughness = 0.95; mat.metalness = 0; this.windify(mat, ({ banana: 0.2, old: 0.09, palm: 0.22 }[kind]) / (H / 0.98), 0.98); // sway amplitude is given in metres, converted to model units
+        if (IS_TOUCH && mat.map && mat.map.image && mat.map.image.width > 512) { // phones: shrink the 1024 texture to 512
+          try { const im = mat.map.image, c = document.createElement('canvas'); c.width = c.height = 512; c.getContext('2d').drawImage(im, 0, 0, 512, 512); const t = new THREE.CanvasTexture(c); t.flipY = false; t.colorSpace = mat.map.colorSpace; t.anisotropy = 1; mat.map = t; mat.needsUpdate = true; } catch (e) {}
+        }
+        const v = { kind, v: cnt[kind]++, scale: H / 0.98, im: new THREE.InstancedMesh(mesh.geometry, mat, cap), list: [] }; v.im.count = 0; v.im.frustumCulled = false; v.im.castShadow = q !== 'low'; this.scene.add(v.im); vs.push(v);
+      }
+      this.treeLod = { vs, cap, R2: R * R, t: 0 };
+    } catch (e) { console.warn('[trees] real tree models not loaded, keeping generated trees', e); }
+  }
+  treeLodUpdate(dt, pos) {
+    const L = this.treeLod; if (!L) return; L.t -= dt; if (L.t > 0) return; L.t = 0.35;
+    const m4 = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = V3(0, 1, 0), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const vr of L.vs) {
+      const cand = []; for (const t of this.treeSlots) if (t.grp === vr.kind && t.v === vr.v) { const dx = t.x - pos.x, dz = t.z - pos.z, d2 = dx * dx + dz * dz; if (d2 < L.R2) cand.push([d2, t]); }
+      cand.sort((a, b) => a[0] - b[0]); const near = cand.slice(0, L.cap).map((c) => c[1]), set = new Set(near);
+      for (const t of this.treeSlots) if (t.grp === vr.kind && t.v === vr.v) {
+        const on = set.has(t), proc = this.treeIM[t.kind];
+        if (on && !t.on) { proc.setMatrixAt(t.idx, zero); proc.instanceMatrix.needsUpdate = true; }
+        else if (!on && t.on) { qt.setFromAxisAngle(up, t.r); m4.compose(V3(t.x, this.groundY(t.x, t.z), t.z), qt, V3(t.s, t.s, t.s)); proc.setMatrixAt(t.idx, m4); proc.instanceMatrix.needsUpdate = true; }
+        t.on = on;
+      }
+      near.forEach((t, i) => { qt.setFromAxisAngle(up, t.r); const k = t.s * vr.scale; m4.compose(V3(t.x, this.groundY(t.x, t.z) - 0.03, t.z), qt, V3(k, k, k)); vr.im.setMatrixAt(i, m4); });
+      vr.im.count = near.length; vr.im.instanceMatrix.needsUpdate = true;
     }
   }
+
 
   village() {
     const dm = new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: 1 }), wm = new THREE.MeshBasicMaterial({ color: 0xffc061, fog: false });
@@ -248,6 +306,7 @@ export class Environment {
   // ---------- per-frame ----------
   update(dt, player) {
     this.time += dt; const t = this.time, p = player.pos;
+    this.treeLodUpdate(dt, p);
     this.riceU.uTime.value = t; this.gustV = Math.max(0, this.gustV - dt); this.riceU.uGust.value += ((this.gustV > 0 ? 1 : 0) - this.riceU.uGust.value) * Math.min(1, dt * 1.5);
     this.waterTex.offset.x += dt * 0.012; this.waterTex.offset.y += dt * 0.007; this.canalTex.offset.x += dt * 0.06;
     for (const c of this.waterCells) c.m.visible = Math.hypot(c.cx - p.x, c.cz - p.z) < 70 + Math.max(10, Math.abs(c.m.geometry.parameters.width) * 0.5);

@@ -1,5 +1,5 @@
 // audio.js – fully procedural positional horror audio (Web Audio API)
-import { rand, pick, settings } from './core.js';
+import { rand, pick, clamp, settings } from './core.js';
 
 export class AudioManager {
   constructor(game) { this.g = game; this.ctx = null; this.on = false; this.timers = []; this.gv = null; this.canal = null; this.hb = 0; }
@@ -13,7 +13,7 @@ export class AudioManager {
     this.master.connect(comp); comp.connect(c.destination);
     const n = c.sampleRate * 3; this.noiseBuf = c.createBuffer(1, n, c.sampleRate);
     const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    this.on = true; this._ambient(); this._ghostVoice(); this.loadLaugh(); this.loadCry();
+    this.on = true; this._ambient(); this._ghostVoice(); this.loadLaugh(); this.loadCry(); this.loadSfx();
   }
   setVolume(v) { if (this.master) this.master.gain.value = v; }
   suspend() { if (this.ctx) this.ctx.suspend(); }
@@ -89,8 +89,9 @@ export class AudioManager {
     }
     // canal water (positional, follows nearest canal)
     const cs = c.createBufferSource(); cs.buffer = this.noiseBuf; cs.loop = true;
-    const cf = c.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 520; cf.Q.value = 0.7;
-    const cg = c.createGain(); cg.gain.value = 0.7; this.canal = this._pan({ x: 0, y: 0, z: -80 });
+    const cf = c.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 360; cf.Q.value = 1.1; // narrow + low = gentle flowing water, not a wide hiss like rain
+    const cg = c.createGain(); cg.gain.value = 0.2; this.canal = this._pan({ x: 0, y: 0, z: -80 }); this.canal.refDistance = 9; this.canal.rolloffFactor = 1.8; // quiet even right at the edge
+    const cl = c.createOscillator(); cl.frequency.value = 0.17; const clg = c.createGain(); clg.gain.value = 0.04; cl.connect(clg); clg.connect(cg.gain); cl.start();
     cs.connect(cf); cf.connect(cg); cg.connect(this.canal); cs.start();
     // random events
     const loop = (fn, a, b) => { const run = () => { if (this.g.state === 'playing' || this.g.state === 'intro') fn(); this.timers.push(setTimeout(run, rand(a, b) * 1000)); }; this.timers.push(setTimeout(run, rand(a, b) * 500)); };
@@ -104,7 +105,7 @@ export class AudioManager {
     for (let i = 0; i < n; i++) this.tone({ f: rand(140, 190), f2: 100, dur: 0.13, type: 'sawtooth', vol: 0.05, lp: 650, pos, delay: i * 0.17 }); }
   dog() { const pos = this._around(70, 100), n = 2 + Math.floor(rand(0, 3));
     for (let i = 0; i < n; i++) { this.tone({ f: 460, f2: 250, dur: 0.2, type: 'sawtooth', vol: 0.06, lp: 1100, pos, delay: i * 0.34 }); this.noise({ dur: 0.12, type: 'bandpass', freq: 900, vol: 0.04, pos, delay: i * 0.34 }); } }
-  owl() { const pos = this._around(20, 45); pos.y = 8;
+  owl() { const pos = this._around(20, 45); pos.y = 8; if (this.sample('owl', pos, 1.5, 10, rand(0.96, 1.04))) return; // your owl.mp3
     this.tone({ f: 430, f2: 380, dur: 0.55, vol: 0.09, lp: 900, pos, attack: 0.08 }); this.tone({ f: 420, f2: 340, dur: 0.8, vol: 0.09, lp: 900, pos, attack: 0.08, delay: 0.75 }); }
   update(dt, player) {
     if (!this.on) return;
@@ -140,10 +141,12 @@ export class AudioManager {
   step(surface, run) {
     const v = run ? 1.3 : 1;
     if (surface === 'wood') { this.noise({ dur: 0.1, freq: 650, vol: 0.18 * v }); this.tone({ f: 95, f2: 60, dur: 0.12, vol: 0.2 * v }); }
-    else if (surface === 'water') { this.noise({ dur: 0.28, type: 'bandpass', freq: 500, freq2: 250, q: 0.8, vol: 0.2 * v }); this.tone({ f: 220, f2: 70, dur: 0.12, vol: 0.06 }); this.noise({ dur: 0.18, type: 'highpass', freq: 2500, vol: 0.05 * v, delay: 0.05 }); }
+    else if (surface === 'water') { if (this.sample('water_step', null, 0.8 * v, 4, (run ? 1.2 : 1) * rand(0.94, 1.06))) return; this.noise({ dur: 0.28, type: 'bandpass', freq: 500, freq2: 250, q: 0.8, vol: 0.2 * v }); this.tone({ f: 220, f2: 70, dur: 0.12, vol: 0.06 }); this.noise({ dur: 0.18, type: 'highpass', freq: 2500, vol: 0.05 * v, delay: 0.05 }); }
     else this.noise({ dur: 0.14, freq: 900, freq2: 350, vol: 0.14 * v });
   }
-  splash(pos, big = 1) { this.noise({ dur: 0.45 * big, type: 'bandpass', freq: 1800, freq2: 400, q: 0.7, vol: 0.2, pos }); this.tone({ f: 300, f2: 90, dur: 0.2, vol: 0.1, pos }); }
+  splash(pos, big = 1) {
+    const now = this.ctx ? this.ctx.currentTime : 0; if (this.sfx && this.sfx.splash) { if (now - (this._spT || -9) < 0.2) return; this._spT = now; if (this.sample('splash', pos, Math.min(1.7, 0.55 + 0.6 * big), 5, rand(0.93, 1.07) * (big < 0.7 ? 1.18 : 1))) return; } // your splash.mp3 (small splashes play it faster/quieter)
+    this.noise({ dur: 0.45 * big, type: 'bandpass', freq: 1800, freq2: 400, q: 0.7, vol: 0.2, pos }); this.tone({ f: 300, f2: 90, dur: 0.2, vol: 0.1, pos }); }
   flop(pos) { this.splash(pos, 0.6); this.noise({ dur: 0.1, freq: 1200, vol: 0.12, pos, delay: 0.14 }); }
   place(pos) { this.noise({ dur: 0.2, type: 'bandpass', freq: 2200, q: 1.5, vol: 0.12, pos }); this.splash(pos, 0.9); }
   pickup() { this.tone({ f: 520, f2: 760, dur: 0.12, type: 'triangle', vol: 0.12 }); this.noise({ dur: 0.08, type: 'highpass', freq: 3000, vol: 0.06 }); }
@@ -158,7 +161,7 @@ export class AudioManager {
     for (let i = 0; i < n; i++) { const d = 7 - i * 0.55, pos = { x: from.x + back.x * d, y: 0.1, z: from.z + back.z * d };
       this.noise({ dur: 0.2, type: 'bandpass', freq: 450, q: 0.8, vol: 0.28, pos, delay: i * 0.55 }); this.tone({ f: 110, f2: 55, dur: 0.12, vol: 0.14, pos, delay: i * 0.55 }); } }
   playerBreath(level) { this.noise({ dur: 0.55, type: 'bandpass', freq: 900, freq2: 600, q: 0.9, vol: 0.09 * level, attack: 0.2 }); }
-  heartbeat(level) { this.tone({ f: 62, f2: 40, dur: 0.16, vol: 0.4 * level }); this.tone({ f: 55, f2: 38, dur: 0.14, vol: 0.26 * level, delay: 0.2 }); }
+  heartbeat(level) { if (this.sample('heartbeat', null, Math.min(1.5, 0.55 + 0.85 * level), 4, clamp(0.9 + 0.45 * level, 0.95, 1.5))) return; this.tone({ f: 62, f2: 40, dur: 0.16, vol: 0.4 * level }); this.tone({ f: 55, f2: 38, dur: 0.14, vol: 0.26 * level, delay: 0.2 }); }
   jumpscare() {
     this.noise({ dur: 1.3, type: 'lowpass', freq: 6000, freq2: 300, vol: 0.9, attack: 0.01 });
     this.tone({ f: 55, f2: 28, dur: 1.5, vol: 0.9, attack: 0.01 });
@@ -173,7 +176,19 @@ export class AudioManager {
   fishJump(pos) { this.noise({ dur: 0.18, type: 'bandpass', freq: 1500, q: 1, vol: 0.12, pos }); this.splash(pos, 1); this.splash(pos, 0.5); }
   sob(pos) { this.voice({ f0: 430, f1: 360, f2: 300, dur: 0.6, vol: 0.1, pos, vib: 20, formants: [800, 2200] }); this.voice({ f0: 400, f1: 340, f2: 290, dur: 0.45, vol: 0.08, pos, vib: 22, delay: 0.7, formants: [800, 2200] }); this.noise({ dur: 0.35, type: 'bandpass', freq: 1200, q: 1, vol: 0.04, pos, delay: 1.3 }); }
   crack(pos) { this.noise({ dur: 0.05, type: 'bandpass', freq: 2200, q: 2, vol: 0.45, pos }); this.noise({ dur: 0.09, type: 'lowpass', freq: 420, vol: 0.4, pos, delay: 0.03 }); this.tone({ f: 170, f2: 70, dur: 0.1, vol: 0.3, pos, type: 'square', lp: 600 }); }
-  slap(pos) { this.noise({ dur: 0.18, type: 'bandpass', freq: 2600, freq2: 700, q: 0.8, vol: 0.5, pos }); this.tone({ f: 140, f2: 50, dur: 0.35, vol: 0.55, pos }); this.noise({ dur: 0.5, type: 'lowpass', freq: 500, vol: 0.35, pos, delay: 0.05 }); this.splash(pos, 1.2); }
+  slap(pos) { if (this.sample('slap', pos, 1.7, 4)) { this.splash(pos, 0.8); return; } this.noise({ dur: 0.18, type: 'bandpass', freq: 2600, freq2: 700, q: 0.8, vol: 0.5, pos }); this.tone({ f: 140, f2: 50, dur: 0.35, vol: 0.55, pos }); this.noise({ dur: 0.5, type: 'lowpass', freq: 500, vol: 0.35, pos, delay: 0.05 }); this.splash(pos, 1.2); }
+  loadSfx() { // assets/flash.mp3, door_open.mp3, door_close.mp3 (your recordings); each falls back to the synthesized sound if it cannot load
+    this.sfx = this.sfx || {}; if (!this.ctx) return;
+    for (const n of ['flash', 'door_open', 'door_close', 'splash', 'water_step', 'heartbeat', 'owl', 'slap']) { if (this.sfx[n] || this['_ld_' + n]) continue; this['_ld_' + n] = true;
+      fetch(`assets/${n}.mp3`).then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej))).then((buf) => { this.sfx[n] = buf; }).catch((e) => { this['_ld_' + n] = false; console.warn(`[audio] ${n}.mp3 not loaded, using synthesized sound`, e); }); }
+  }
+  sample(n, pos, vol = 1, ref = 4, rate = 1) { // true when the recorded sample was played
+    const b = this.sfx && this.sfx[n]; if (!this.on || !b) return false; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(); s.buffer = b; s.playbackRate.value = rate; g.gain.value = vol; s.connect(g);
+    if (pos) { const pn = this._dest(pos); pn.refDistance = ref; g.connect(pn); } else g.connect(this.master); s.start(); return true;
+  }
+  flashSfx() { if (!this.sample('flash', null, 0.9)) this.click(); }
+  doorOpen(pos) { if (!this.sample('door_open', pos, 1.3)) this.door(pos); }
+  doorClose(pos) { if (!this.sample('door_close', pos, 1.3)) this.door(pos); }
   loadCry() { // assets/cry.mp3 = the weeping woman's sobbing (loops while she sits on the dike)
     if (this.cryBuf || this.cryLoading || !this.ctx) return; this.cryLoading = true;
     fetch('assets/cry.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej))).then((buf) => { this.cryBuf = buf; }).catch((e) => { this.cryLoading = false; console.warn('[audio] cry.mp3 not loaded, using synthesized sobbing', e); });

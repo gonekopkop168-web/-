@@ -36,7 +36,7 @@
     <div class="mRow"><span>ត្រឡប់ផ្ទះ · Return</span><b id="returnState">—</b></div>
   </div>
 
-  <button id="btnPause" class="hudBtn" aria-label="Pause">❚❚</button>
+  <button id="btnPause" class="hudBtn" aria-label="Pause"></button>
 
   <div id="bars">
     <div class="barWrap"><label>ឈាម · HEALTH <em id="hpTxt">100</em></label><div class="bar"><i id="hpBar"></i></div></div>
@@ -64,7 +64,6 @@
   <button id="tJump" class="tBtn">▲</button>
   <button id="tAct" class="tBtn big">E</button>
   <button id="tLight" class="tBtn">🔦</button>
-  <button id="tTrap" class="tBtn">🪤</button>
 </div>
 
 <!-- screens -->
@@ -113,21 +112,40 @@
 <section id="howto" class="screen">
   <div class="panel wide">
     <h2>របៀបលេង · HOW TO PLAY</h2>
-    <p class="story">It is midnight. You wake in an old wooden house. Take the <b>flashlight</b> and the <b>បង្កៃ</b> (a bent bamboo pole with a line and bait), walk the narrow rice-field dikes, place <b>5 traps</b> in the paddies, catch <b>3 fish</b> — then get back home alive. <span class="red">She</span> is out there.</p>
-    <div class="keys">
-      <div><kbd>W A S D</kbd> Move</div><div><kbd>Mouse</kbd> Look</div>
-      <div><kbd>Shift</kbd> Run (uses stamina)</div><div><kbd>Space</kbd> Jump</div>
-      <div><kbd>E</kbd> Interact / place trap / collect fish</div><div><kbd>Left Click</kbd> Place fishing trap</div>
-      <div><kbd>F</kbd> Flashlight</div><div><kbd>Esc</kbd> Pause</div>
+    <div class="howKh">
+      <p class="story">ពាក់កណ្ដាលអធ្រាត្រ។ អ្នកភ្ញាក់ឡើងក្នុងផ្ទះឈើចាស់។ យក<b>ពិល</b>និង<b>បង្កៃ</b> (បង្កៃឫស្សីកោង មានខ្សែ និងដាក់ម្ហូប) ដើរតាមភ្លឺស្រែចង្អៀតៗ ដាក់<b>បង្កៃ ៥</b> ក្នុងស្រែ ចាប់<b>ត្រី ៣ ក្បាល</b> រួចត្រឡប់ទៅផ្ទះឲ្យបានរស់។ <span class="red">នាង</span>កំពុងនៅខាងក្រៅ។</p>
+      <div class="keys">
+        <div><kbd>W A S D</kbd> ដើរ</div><div><kbd>Mouse</kbd> មើល</div>
+        <div><kbd>Shift</kbd> រត់ (ចំណាយកម្លាំង)</div><div><kbd>Space</kbd> លោត</div>
+        <div><kbd>E</kbd> ប្រើ / ដាក់បង្កៃ / យកត្រី</div><div><kbd>Left Click</kbd> ដាក់បង្កៃ</div>
+        <div><kbd>F</kbd> ពិល</div><div><kbd>Esc</kbd> ផ្អាក</div>
+      </div>
+      <ul class="tips">
+        <li>ដាក់បង្កៃតែក្នុង<b>ទឹករវាងដើមស្រូវ</b>ប៉ុណ្ណោះ (មានស្រមោលបង្កៃពណ៌បៃតងបង្ហាញកន្លែង)។</li>
+        <li>ត្រឡប់មកវិញពេលក្រោយ ហើយចុច <kbd>E</kbd> ត្រង់បង្កៃ ដើម្បី<b>ដកវាចេញពីទឹក</b>។ បើមានត្រី វានឹងចូលក្នុងថង់របស់អ្នក ហើយអ្នកបានបង្កៃមកវិញដើម្បីដាក់ម្តងទៀត។</li>
+        <li>ត្រីរត់គេចពេលអ្នកទះទឹកជិតវា។ មានរឿងចម្លែកកើតឡើងក្នុងស្រែ៖ ប្រយ័ត្នស្រមោល ប្រឡាយ និងបង្កៃរបស់អ្នក។</li>
+        <li>អាចបិទទ្វារផ្ទះបាន – នាងមិនអាចឆ្លងកាត់ទ្វារបិទបានទេ។</li>
+        <li>រត់យូរពេកធ្វើឲ្យអស់កម្លាំង។ អាចដូរថ្មពិលនៅលើតុ។</li>
+        <li><b>ទូរសព្ទ៖</b> ដំបងឆ្វេង = ដើរ អូសផ្នែកស្តាំ = មើល ហើយមានប៊ូតុងសម្រាប់រត់ / លោត / E (ប្រើ និងដាក់បង្កៃ) / ពិល។</li>
+      </ul>
     </div>
-    <ul class="tips">
-      <li>Place traps only in the <b>water between the rice</b> (a green ghost-trap shows where).</li>
-      <li>Return later and press <kbd>E</kbd> at a trap to <b>pull it out of the water</b>. If a fish is inside, it joins your inventory and you get the trap back to place again.</li>
-      <li>Fish flee when you splash near them. Strange things happen on the fields: watch the shadows, the canals and your traps.</li>
-      <li>The house door can be closed – she cannot get through a closed door.</li>
-      <li>Running too long exhausts you. Batteries can be replaced at the table.</li>
-      <li><b>Phone:</b> left stick = move, drag right side = look, buttons for run / jump / interact / light / trap.</li>
-    </ul>
+    <div class="howEn">
+      <p class="story">It is midnight. You wake in an old wooden house. Take the <b>flashlight</b> and the <b>បង្កៃ</b> (a bent bamboo pole with a line and bait), walk the narrow rice-field dikes, place <b>5 traps</b> in the paddies, catch <b>3 fish</b> — then get back home alive. <span class="red">She</span> is out there.</p>
+      <div class="keys">
+        <div><kbd>W A S D</kbd> Move</div><div><kbd>Mouse</kbd> Look</div>
+        <div><kbd>Shift</kbd> Run (uses stamina)</div><div><kbd>Space</kbd> Jump</div>
+        <div><kbd>E</kbd> Interact / place trap / collect fish</div><div><kbd>Left Click</kbd> Place fishing trap</div>
+        <div><kbd>F</kbd> Flashlight</div><div><kbd>Esc</kbd> Pause</div>
+      </div>
+      <ul class="tips">
+        <li>Place traps only in the <b>water between the rice</b> (a green ghost-trap shows where).</li>
+        <li>Return later and press <kbd>E</kbd> at a trap to <b>pull it out of the water</b>. If a fish is inside, it joins your inventory and you get the trap back to place again.</li>
+        <li>Fish flee when you splash near them. Strange things happen on the fields: watch the shadows, the canals and your traps.</li>
+        <li>The house door can be closed – she cannot get through a closed door.</li>
+        <li>Running too long exhausts you. Batteries can be replaced at the table.</li>
+        <li><b>Phone:</b> left stick = move, drag right side = look, buttons for run / jump / E (interact and place trap) / light.</li>
+      </ul>
+    </div>
     <button id="btnHowBack" class="solid">← ត្រឡប់ · BACK</button>
   </div>
 </section>

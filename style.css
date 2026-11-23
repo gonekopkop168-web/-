@@ -28,7 +28,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .mRow b{color:var(--ink);font-family:var(--font);letter-spacing:.1em;font-size:16px}
 .mRow b.done{color:#6fcf7a}
 .hudBtn{position:absolute;top:14px;right:14px;pointer-events:auto;width:42px;height:42px;border-radius:50%;
-  background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:var(--ink);font-size:14px;cursor:pointer}
+  background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:var(--ink);font-size:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;padding:0;touch-action:manipulation}
+.hudBtn::before,.hudBtn::after{content:'';display:block;width:5px;height:16px;border-radius:1px;background:var(--ink)}
 #bars{position:absolute;left:14px;top:14px;bottom:auto;width:min(250px,42vw)}
 #missionPanel{display:none!important}
 .barWrap{margin-top:7px}
@@ -132,7 +133,6 @@ kbd{background:#1b1c1f;border:1px solid #3a3c40;border-bottom-width:3px;padding:
 #tAct{right:26px;bottom:104px}
 #tRun{right:112px;bottom:40px;font-size:13px}
 #tJump{right:26px;bottom:200px}
-#tTrap{right:112px;bottom:130px}
 #tLight{right:196px;bottom:70px}
 body.touch #inventory{bottom:auto;top:14px;right:68px;flex-direction:row;gap:6px}
 body.touch #bars{top:12px;bottom:auto;left:14px;width:min(230px,30vw)}
@@ -202,7 +202,12 @@ body.q-medium #game,body.q-high #game{filter:contrast(1.1) saturate(.85) brightn
 .loadTap{margin:12px 0 0;font-size:11px;letter-spacing:.08em;color:#e02433;opacity:.85;animation:loadFade 2.2s ease-in-out infinite}
 
 /* typed dialogue line */
-#dialog{position:fixed;left:50%;bottom:19%;transform:translateX(-50%);width:min(780px,90vw);text-align:center;z-index:40;pointer-events:none;opacity:0;transition:opacity .35s}
+#dialog{position:fixed;left:50%;bottom:11%;transform:translateX(-50%);width:min(780px,90vw);text-align:center;z-index:40;pointer-events:none;opacity:0;transition:opacity .35s}
 #dialog.show{opacity:1}
-#dialog b{display:block;font-family:'Noto Sans Khmer',sans-serif;font-weight:700;font-size:clamp(18px,3.4vw,28px);line-height:1.6;color:#f1ede4;text-shadow:0 2px 0 #000,0 0 16px rgba(224,36,51,.55),0 0 30px #000;min-height:1.6em}
-#dialog small{display:block;margin-top:2px;font-size:clamp(11px,1.7vw,14px);color:#9a9ea1;font-style:italic;text-shadow:0 1px 0 #000}
+#dialog b{display:block;font-family:'Noto Sans Khmer',sans-serif;font-weight:700;font-size:clamp(12px,2.1vw,18px);line-height:1.5;color:#f1ede4;text-shadow:0 2px 0 #000,0 0 16px rgba(224,36,51,.55),0 0 30px #000;min-height:1.5em}
+#dialog small{display:block;margin-top:2px;font-size:clamp(9px,1.25vw,11px);color:#9a9ea1;font-style:italic;text-shadow:0 1px 0 #000}
+
+.howKh,.howEn{display:flex;flex-direction:column;gap:12px}
+.howKh{font-family:'Noto Sans Khmer',var(--body),sans-serif}
+.howEn{margin-top:6px;padding-top:14px;border-top:1px solid rgba(255,255,255,.14);opacity:.78}
+.howEn .story{font-size:12.5px}.howEn .keys,.howEn .tips{font-size:12px}
