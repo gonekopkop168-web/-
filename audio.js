@@ -179,13 +179,14 @@ export class AudioManager {
   slap(pos) { if (this.sample('slap', pos, 1.7, 4)) { this.splash(pos, 0.8); return; } this.noise({ dur: 0.18, type: 'bandpass', freq: 2600, freq2: 700, q: 0.8, vol: 0.5, pos }); this.tone({ f: 140, f2: 50, dur: 0.35, vol: 0.55, pos }); this.noise({ dur: 0.5, type: 'lowpass', freq: 500, vol: 0.35, pos, delay: 0.05 }); this.splash(pos, 1.2); }
   loadSfx() { // assets/flash.mp3, door_open.mp3, door_close.mp3 (your recordings); each falls back to the synthesized sound if it cannot load
     this.sfx = this.sfx || {}; if (!this.ctx) return;
-    for (const n of ['flash', 'door_open', 'door_close', 'splash', 'water_step', 'heartbeat', 'owl', 'slap']) { if (this.sfx[n] || this['_ld_' + n]) continue; this['_ld_' + n] = true;
+    for (const n of ['flash', 'door_open', 'door_close', 'splash', 'water_step', 'heartbeat', 'owl', 'slap', 'rise']) { if (this.sfx[n] || this['_ld_' + n]) continue; this['_ld_' + n] = true;
       fetch(`assets/${n}.mp3`).then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej))).then((buf) => { this.sfx[n] = buf; }).catch((e) => { this['_ld_' + n] = false; console.warn(`[audio] ${n}.mp3 not loaded, using synthesized sound`, e); }); }
   }
   sample(n, pos, vol = 1, ref = 4, rate = 1) { // true when the recorded sample was played
     const b = this.sfx && this.sfx[n]; if (!this.on || !b) return false; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(); s.buffer = b; s.playbackRate.value = rate; g.gain.value = vol; s.connect(g);
     if (pos) { const pn = this._dest(pos); pn.refDistance = ref; g.connect(pn); } else g.connect(this.master); s.start(); return true;
   }
+  rise(pos) { this.sample('rise', pos, 1.5, 6); } // extra layer when the ghost rises out of the water (the gurgle and splash stay)
   flashSfx() { if (!this.sample('flash', null, 0.9)) this.click(); }
   doorOpen(pos) { if (!this.sample('door_open', pos, 1.3)) this.door(pos); }
   doorClose(pos) { if (!this.sample('door_close', pos, 1.3)) this.door(pos); }

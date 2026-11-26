@@ -69,17 +69,31 @@ export class Environment {
     const s = this.scene; s.background = new THREE.Color(0x070b14); s.fog = new THREE.FogExp2(0x0b121b, this.q === 'low' ? 0.036 : 0.042);
     this.moonDir = V3(-0.35, 0.5, -0.8).normalize();
     const moon = new THREE.Mesh(new THREE.SphereGeometry(16, 24, 16), new THREE.MeshBasicMaterial({ color: 0xe3ebff, fog: false }));
-    moon.position.copy(this.moonDir).multiplyScalar(420); s.add(moon);
+    moon.position.copy(this.moonDir).multiplyScalar(420); s.add(moon); this.moonMesh = moon;
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(190,210,255,1)', 128), fog: false, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-    glow.scale.set(150, 150, 1); glow.position.copy(moon.position); s.add(glow);
+    glow.scale.set(150, 150, 1); glow.position.copy(moon.position); s.add(glow); this.moonGlow = glow;
     const n = 450, pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { const v = V3(rand(-1, 1), rand(0.05, 1), rand(-1, 1)).normalize().multiplyScalar(500); pos.set([v.x, v.y, v.z], i * 3); }
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    s.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.7 })));
+    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.7 })); s.add(this.stars);
+    this.night = { bg: s.background.clone(), fog: s.fog.color.clone(), fogD: s.fog.density, moonDir: this.moonDir.clone() };
+  }
+  // daytime (level 2 cut-scene in front of the house) / back to the night
+  setDay(on) {
+    const s = this.scene, n = this.night; this.day = !!on;
+    if (on) {
+      if (!this.skyTex) { const c = document.createElement('canvas'); c.width = 4; c.height = 256; const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, '#4f9be0'); g.addColorStop(0.55, '#9ccbee'); g.addColorStop(1, '#dcebf2'); x.fillStyle = g; x.fillRect(0, 0, 4, 256); this.skyTex = new THREE.CanvasTexture(c); this.skyTex.colorSpace = THREE.SRGBColorSpace; }
+      s.background = this.skyTex; s.fog.color.set(0xcfe3ee); s.fog.density = 0.011; this.moonDir.set(0.4, 0.62, 0.68).normalize();
+      this.hemi.color.set(0xcfe4ff); this.hemi.groundColor.set(0x7a6a48); this.hemi.intensity = 1.7; this.moon.color.set(0xfff0d2); this.moon.intensity = 3.0;
+    } else {
+      s.background = n.bg; s.fog.color.copy(n.fog); s.fog.density = n.fogD; this.moonDir.copy(n.moonDir);
+      this.hemi.color.set(0x3a4c7a); this.hemi.groundColor.set(0x151a10); this.hemi.intensity = 1.25; this.moon.color.set(0x8fa8e0); this.moon.intensity = 1.5;
+    }
+    this.moonMesh.visible = this.moonGlow.visible = this.stars.visible = !on; if (this.ffPts) this.ffPts.visible = !on; for (const f of this.fogS || []) f.visible = !on;
   }
   lights() {
     const s = this.scene;
-    s.add(new THREE.HemisphereLight(0x3a4c7a, 0x151a10, 1.25));
+    this.hemi = new THREE.HemisphereLight(0x3a4c7a, 0x151a10, 1.25); s.add(this.hemi);
     this.moon = new THREE.DirectionalLight(0x8fa8e0, 1.5); this.moon.position.copy(this.moonDir).multiplyScalar(100); s.add(this.moon, this.moon.target);
     if (this.q !== 'low') {
       this.moon.castShadow = true; const m = this.q === 'high' ? 2048 : 1024; this.moon.shadow.mapSize.set(m, m);
@@ -311,7 +325,7 @@ export class Environment {
     this.waterTex.offset.x += dt * 0.012; this.waterTex.offset.y += dt * 0.007; this.canalTex.offset.x += dt * 0.06;
     for (const c of this.waterCells) c.m.visible = Math.hypot(c.cx - p.x, c.cz - p.z) < 70 + Math.max(10, Math.abs(c.m.geometry.parameters.width) * 0.5);
     for (const c of this.riceCells) c.m.visible = Math.hypot(c.cx - p.x, c.cz - p.z) < (this.q === 'low' ? 46 : 58);
-    if (this.lamp) this.lamp.intensity = 12 * (0.9 + 0.06 * Math.sin(t * 11) + 0.04 * Math.sin(t * 27.3));
+    if (this.lamp) this.lamp.intensity = this.day ? 0 : 12 * (0.9 + 0.06 * Math.sin(t * 11) + 0.04 * Math.sin(t * 27.3));
     this.door.update(dt); this.door.col.active = !this.door.open;
     this.moon.position.set(p.x + this.moonDir.x * 100, this.moonDir.y * 100, p.z + this.moonDir.z * 100); this.moon.target.position.set(p.x, 0, p.z);
     for (const s of this.fogS) { s.position.addScaledVector(s.userData.v, dt); const dx = s.position.x - p.x, dz = s.position.z - p.z; if (Math.hypot(dx, dz) > 50) s.position.set(p.x - dx * 0.9, s.position.y, p.z - dz * 0.9); }
@@ -329,13 +343,14 @@ export class Environment {
 // ---------- water ripples + splashes ----------
 export class FX {
   constructor(game) {
-    this.s = game.scene; this.rings = []; this.drops = []; this.puffs = []; this.sm = null;
+    this.s = game.scene; this.rings = []; this.drops = []; this.puffs = []; this.sm = null; this.fire = []; this.fe = null;
     let tex = null; try { // soft, uneven black smoke blob
       const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
       for (let i = 0; i < 9; i++) { const px = 32 + (Math.random() - 0.5) * 22, py = 32 + (Math.random() - 0.5) * 22, r = 14 + Math.random() * 12, g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); }
       tex = new THREE.CanvasTexture(c);
     } catch (e) { tex = null; }
     for (let i = 0; i < (game.low ? 60 : 110); i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x07070a, transparent: true, opacity: 0, depthWrite: false })); sp.visible = false; this.s.add(sp); this.puffs.push({ sp, on: false, t: 0, life: 1, v: V3(), s0: 1, s1: 2, rot: 0, rv: 0 }); }
+    const ft = glowTexture('rgba(255,150,40,1)', 64); for (let i = 0; i < (game.low ? 40 : 70); i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ft, color: 0xff8a20, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); sp.visible = false; this.s.add(sp); this.fire.push({ sp, on: false, t: 0, life: 1, v: V3(), s0: 0.3, s1: 0.1 }); }
     const rg = new THREE.RingGeometry(0.82, 1, 28); rg.rotateX(-Math.PI / 2);
     for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xaec4d0, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; this.s.add(m); this.rings.push({ m, t: 0, life: 1, max: 1, on: false }); }
     const dg = new THREE.SphereGeometry(0.03, 5, 4);
@@ -351,7 +366,13 @@ export class FX {
   drip(x, y, z) { const d = this.drops.find(d => !d.on); if (!d) return; d.on = true; d.m.visible = true; d.m.position.set(x + rand(-0.15, 0.15), y, z + rand(-0.15, 0.15)); d.v.set(rand(-0.2, 0.2), rand(-0.5, 0.3), rand(-0.2, 0.2)); }
   // black smoke column around a spot (used when the weeping woman turns into the ghost): builds up for `up` seconds, then pours until `dur`
   smokeOn(x, y, z, dur = 3, up = 0.8, h = 1.8) { this.sm = { x, y, z, t: 0, dur, up, h, acc: 0 }; }
+  // flames that burn on a moving object (the headless ghost): src = Object3D, h = body height, w = width
+  fireOn(src, dur = 5, h = 1.9, w = 0.35) { this.fe = { src, t: 0, dur, h, w, acc: 0 }; }
+  fireOff() { this.fe = null; }
   update(dt) {
+    const fe = this.fe; if (fe) { fe.t += dt; if (fe.t >= fe.dur) this.fe = null; else { const k = Math.min(1, fe.t / 0.5) * Math.min(1, (fe.dur - fe.t) / 0.8 + 0.2); fe.acc += dt * 60 * k;
+      while (fe.acc >= 1) { fe.acc -= 1; const f = this.fire.find(q => !q.on); if (!f) { fe.acc = 0; break; } f.on = true; f.t = 0; f.life = rand(0.45, 0.9); f.s0 = rand(0.45, 0.8); f.s1 = 0.1; const a = rand(0, 6.283), r = rand(0, fe.w); f.v.set(rand(-0.3, 0.3), rand(1.0, 2.2), rand(-0.3, 0.3)); f.sp.position.set(fe.src.position.x + Math.cos(a) * r, fe.src.position.y + rand(0, fe.h), fe.src.position.z + Math.sin(a) * r); f.sp.visible = true; } } }
+    for (const f of this.fire) if (f.on) { f.t += dt; const k = f.t / f.life; if (k >= 1) { f.on = false; f.sp.visible = false; continue; } f.sp.position.addScaledVector(f.v, dt); f.sp.scale.setScalar(f.s0 + (f.s1 - f.s0) * k); f.sp.material.opacity = 0.95 * (1 - k) ** 0.8; f.sp.material.color.setRGB(1, 0.75 - 0.55 * k, 0.25 - 0.2 * k); }
     const sm = this.sm;
     if (sm) {
       sm.t += dt;

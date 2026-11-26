@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 export const FISH_TYPES = {
   snakehead: { km: 'ត្រីរ៉ស់', en: 'Snakehead', len: 0.75, body: 0x3a4526, belly: 0xa8a27a, h: 0.1 },
   catfish: { km: 'ត្រីអណ្ដែង', en: 'Catfish', len: 0.5, body: 0x55503f, belly: 0x9a937c, h: 0.11 },
-  small: { km: 'ត្រីតូច', en: 'Small rice-field fish', len: 0.16, body: 0xb8c4c0, belly: 0xe6ece8, h: 0.06 },
+  small: { km: 'ត្រីក្រាញ់', en: 'Climbing perch', len: 0.16, body: 0xb8c4c0, belly: 0xe6ece8, h: 0.06 },
 };
 
 let TRAP_GEO = null, TRAP_STOW = null, TRAP_MAT = null;
@@ -59,7 +59,9 @@ export function makeFishMesh(type) {
 }
 
 const FISH_WEIGHTS = [['snakehead', 0.25], ['catfish', 0.3], ['small', 0.45]];
-const rollType = () => { let r = Math.random(); for (const [k, w] of FISH_WEIGHTS) { r -= w; if (r <= 0) return k; } return 'small'; };
+const rollType = (g) => { // level 2 only needs catfish + snakehead: weight each by how many are still missing
+  if (g && g.level === 2 && g.targets.byType) { if (Math.random() < 0.30) return 'small'; /* a wasted pull: climbing perch does not count */ const w = Object.entries(g.targets.byType).map(([k, n]) => [k, Math.max(0, n - (g.fishByType[k] || 0)) + 0.6]); let r = Math.random() * w.reduce((a, b) => a + b[1], 0); for (const [k, x] of w) { r -= x; if (r <= 0) return k; } return w[0][0]; }
+  let r = Math.random(); for (const [k, w] of FISH_WEIGHTS) { r -= w; if (r <= 0) return k; } return 'small'; };
 
 export class FishingTrap {
   constructor(game, x, z, yaw) {
@@ -110,7 +112,7 @@ export class FishingTrap {
   }
   attempt() {
     this.busy = true; const ok = Math.random() < this.catchChance;
-    this.g.fishSys.dispatch(this, ok, ok ? rollType() : 'small');
+    this.g.fishSys.dispatch(this, ok, ok ? rollType(this.g) : 'small');
   }
   attemptDone(success, type) {
     this.busy = false;

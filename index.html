@@ -31,8 +31,9 @@
   <div id="missionPanel">
     <div class="mTitle">បេសកកម្ម · MISSION</div>
     <div id="objective">…</div>
-    <div class="mRow"><span>ត្រីចាប់បាន · Fish</span><b id="fishCount">0/3</b></div>
+    <div class="mRow"><span id="fishLbl">ត្រីចាប់បាន · Fish</span><b id="fishCount">0/10</b></div>
     <div class="mRow"><span>បង្កៃដាក់ · Traps</span><b id="trapCount">0/5</b></div>
+    <div class="mRow" id="rowNeck" style="display:none"><span>ខ្សែក · Necklace</span><b id="neckState">—</b></div>
     <div class="mRow"><span>ត្រឡប់ផ្ទះ · Return</span><b id="returnState">—</b></div>
   </div>
 
@@ -93,6 +94,15 @@
       <button id="btnHow"><b>របៀបលេង</b><small>HOW TO PLAY</small></button>
     </nav>
     <p class="warn">🎧 ប្រើកាស · Headphones recommended. Contains horror &amp; jump scares.</p>
+  </div>
+</section>
+
+<section id="levels" class="screen">
+  <div class="panel">
+    <h2>ជ្រើសរើសកម្រិត · SELECT LEVEL</h2>
+    <button id="btnLv1" class="solid"><b>កម្រិត ១</b><small> · LEVEL 1</small><br><small>រកត្រី ១០ក្បាល · 10 fish</small></button>
+    <button id="btnLv2" class="solid"><b>កម្រិត ២</b><small> · LEVEL 2</small><br><small>ឈុតកសិករ + អណ្ដែង ×៥ រ៉ស់ ×៥ · farmer scene + 5 catfish &amp; 5 snakehead</small></button>
+    <button id="btnLvBack">ត្រឡប់ក្រោយ · BACK</button>
   </div>
 </section>
 
@@ -165,6 +175,14 @@
   <div class="skip" id="introSkip">Enter / tap · skip</div>
 </section>
 
+<section id="mission" class="screen">
+  <div class="panel missionPanel">
+    <div class="missionKh" id="missionKh">រកត្រីឲ្យបាន <b>១០ក្បាល</b> ហើយត្រូវប្រញាប់មកផ្ទះវិញ!</div>
+    <div class="missionEn" id="missionEn">Catch <b>10 fish</b>, then hurry back home!</div>
+    <button id="btnMission" class="solid">ចាប់ផ្តើម · START</button>
+  </div>
+</section>
+
 <section id="gameover" class="screen">
   <div class="panel dead">
     <h1>YOU DIED</h1>
@@ -178,9 +196,10 @@
 <section id="victory" class="screen">
   <div class="panel win">
     <h1>YOU SURVIVED</h1>
-    <h2 class="sub">អ្នករួចជីវិត · ព្រឹកមកដល់ហើយ</h2>
+    <h2 class="sub" id="winSub">អ្នករួចជីវិត · ព្រឹកមកដល់ហើយ</h2>
     <p id="winStats"></p>
-    <button id="btnPlayAgain" class="solid">លេងម្តងទៀត · PLAY AGAIN</button>
+    <button id="btnNext" class="solid">កម្រិត ២ · NEXT LEVEL</button>
+    <button id="btnPlayAgain">លេងម្តងទៀត · PLAY AGAIN</button>
     <button id="btnWinMenu">ម៉ឺនុយ · MAIN MENU</button>
   </div>
 </section>

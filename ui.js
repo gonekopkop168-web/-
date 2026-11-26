@@ -4,22 +4,23 @@ import { FISH_TYPES } from './fishing.js';
 
 export class UIManager {
   constructor(game) {
-    this.g = game; this.cache = {}; this.toastT = null; this.screens = ['loading', 'menu', 'settings', 'howto', 'pause', 'intro', 'gameover', 'victory']; this.prev = 'menu';
+    this.g = game; this.cache = {}; this.toastT = null; this.screens = ['loading', 'menu', 'levels', 'settings', 'howto', 'pause', 'intro', 'mission', 'gameover', 'victory']; this.prev = 'menu';
     if (IS_TOUCH) $('touch').classList.remove('hidden');
     $('touch').classList.add('hidden');
     $('setVolume').value = settings.volume; $('setSens').value = settings.sens; $('setQuality').value = settings.quality;
     $('setVolume').oninput = (e) => { settings.volume = +e.target.value; saveSettings(); game.audio.setVolume(settings.volume); };
     $('setSens').oninput = (e) => { settings.sens = +e.target.value; saveSettings(); game.controls.pointerSpeed = settings.sens; };
     $('setQuality').onchange = (e) => { settings.quality = e.target.value; saveSettings(); if (game.built) { $('qualityHint').textContent = '⚠ Reload the page to apply the new graphics quality.'; } };
-    $('btnStart').onclick = () => game.startNewGame();
+    $('btnStart').onclick = () => this.show('levels'); $('btnLv1').onclick = () => game.startNewGame(1); $('btnLv2').onclick = () => game.startNewGame(2); $('btnLvBack').onclick = () => this.show('menu');
     $('btnSettings').onclick = () => { this.prev = 'menu'; this.show('settings'); };
     $('btnPauseSettings').onclick = () => { this.prev = 'pause'; this.show('settings'); };
     $('btnSettingsBack').onclick = () => this.show(this.prev);
     $('btnHow').onclick = () => this.show('howto'); $('btnHowBack').onclick = () => this.show('menu');
     $('btnResume').onclick = () => game.resume(); $('btnPause').onclick = () => game.pause();
-    $('btnRestart').onclick = () => game.startNewGame(); $('btnToMenu').onclick = () => game.toMenu();
-    $('btnRetry').onclick = () => game.startNewGame(); $('btnDeadMenu').onclick = () => game.toMenu();
-    $('btnPlayAgain').onclick = () => game.startNewGame(); $('btnWinMenu').onclick = () => game.toMenu();
+    $('btnRestart').onclick = () => game.startNewGame(game.level); $('btnToMenu').onclick = () => game.toMenu();
+    $('btnRetry').onclick = () => game.startNewGame(game.level); $('btnDeadMenu').onclick = () => game.toMenu();
+    $('btnPlayAgain').onclick = () => game.startNewGame(1); $('btnNext').onclick = () => game.startNewGame(2); $('btnWinMenu').onclick = () => game.toMenu();
+    $('btnMission').onclick = () => game.startMission();
     $('introSkip').onclick = () => game.skipIntro(); $('intro').addEventListener('pointerdown', () => game.skipIntro());
     this.grain();
   }
@@ -35,6 +36,7 @@ export class UIManager {
       this._lt = setInterval(() => { this.lshow = (this.lshow || 0) + ((this.lp || 0) - (this.lshow || 0)) * 0.12; const v = Math.round(this.lshow); $('loadPct').textContent = v + '%'; $('loadFill').style.width = this.lshow.toFixed(1) + '%'; }, 40); }
   }
   show(id) { for (const s of this.screens) $(s).classList.toggle('active', s === id); }
+  missionText(l) { $('missionKh').innerHTML = l === 2 ? 'រកត្រីអណ្ដែង <b>×៥</b> និងត្រីរ៉ស់ <b>×៥</b> រួចប្រញាប់មកផ្ទះវិញ!' : 'រកត្រីឲ្យបាន <b>១០ក្បាល</b> ហើយត្រូវប្រញាប់មកផ្ទះវិញ!'; $('missionEn').innerHTML = l === 2 ? 'Catch <b>5 catfish</b> and <b>5 snakehead</b>, then hurry back home!' : 'Catch <b>10 fish</b>, then hurry back home!'; }
   hideAll() { this.show(null); }
   hud(on) { $('hud').classList.toggle('hidden', !on); if (IS_TOUCH) $('touch').classList.toggle('hidden', !on); }
   set(id, v, prop = 'textContent') { if (this.cache[id + prop] !== v) { this.cache[id + prop] = v; $(id)[prop] = v; } }
@@ -56,10 +58,11 @@ export class UIManager {
   }
   update(g) {
     const p = g.player, T = g.targets;
-    this.set('fishCount', `${g.fishCollected}/${T.fish}`); this.set('trapCount', `${g.trapsPlacedTotal}/${T.traps}`);
-    $('fishCount').classList.toggle('done', g.fishCollected >= T.fish); $('trapCount').classList.toggle('done', g.trapsPlacedTotal >= T.traps);
-    const ready = g.fishCollected >= T.fish && g.trapsPlacedTotal >= T.traps; this.set('returnState', ready ? 'GO HOME' : '—');
+    this.set('fishLbl', T.byType ? 'អណ្ដែង · រ៉ស់' : 'ត្រីចាប់បាន · Fish'); this.set('fishCount', g.fishProgress()); this.set('trapCount', `${g.trapsPlacedTotal}/${T.traps}`);
+    $('fishCount').classList.toggle('done', g.quotaMet()); $('trapCount').classList.toggle('done', g.trapsPlacedTotal >= T.traps);
+    const ready = g.quotaMet() && g.trapsPlacedTotal >= T.traps; this.set('returnState', ready ? 'GO HOME' : '—');
     this.set('objective', g.objective());
+    $('rowNeck').style.display = g.level === 2 ? '' : 'none'; if (g.level === 2) this.set('neckState', g.necklace.worn ? 'ពាក់ហើយ ✓' : g.necklace.broken ? 'ខូច ✗' : 'លើគ្រែ');
     $('batteryBar').style.width = p.battery + '%'; $('batteryBar').classList.toggle('low', p.battery < 20);
     $('staminaBar').style.width = p.stamina + '%'; $('staminaBar').classList.toggle('low', p.exhausted);
     this.set('batteryTxt', p.hasFlashlight ? Math.round(p.battery) + '%' : '—');

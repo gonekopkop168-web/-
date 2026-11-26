@@ -6,15 +6,17 @@ import { Environment, FX, Frogs } from './environment.js';
 import { HorrorEvents } from './events.js';
 import { FishingTrap, FishSystem, FISH_TYPES, trapGeometry } from './fishing.js';
 import { GhostAI } from './ghost.js';
-import { GhostRig } from './ghostrig.js';
+import { GhostRig, loadPropModel } from './ghostrig.js';
 import { PlayerController } from './player.js';
+import { HeadlessEvent } from './headless.js';
 import { UIManager } from './ui.js';
 
 const MAX_CARRY = 6;
+const LEVELS = { 1: { fish: 10, traps: 5 }, 2: { fish: 10, traps: 5, byType: { catfish: 5, snakehead: 5 } } }; // level 2: 5 catfish (អណ្ដែង) + 5 snakehead (រ៉ស់)
 
 class GameManager {
   constructor() {
-    this.state = 'menu'; this.built = false; this.low = settings.quality === 'low'; this.targets = { fish: 3, traps: 5 };
+    this.state = 'menu'; this.built = false; this.low = settings.quality === 'low'; this.level = 1; this.targets = LEVELS[1]; this.necklace = { worn: false, broken: false }; this.hl = new HeadlessEvent(this);
     this.renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: settings.quality !== 'low', powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.low ? 1 : settings.quality === 'medium' ? 1.5 : 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.0;
@@ -55,25 +57,33 @@ class GameManager {
           this.ui.show('menu');
     })());
   }
-  async startNewGame() {
+  async startNewGame(level = 1) {
+    this.level = level; this.targets = LEVELS[level]; this.ui.missionText(level); this.cut = null;
     this.goFullscreen(); this.audio.init(); this.audio.resume(); this.ui.hideAll(); this.lockPointer();
     if (!this.built) { this.ui.show('loading'); await this.build(); }
     try { this.resetWorld(); } catch (e) { console.error('[game] resetWorld failed, continuing', e); } // never get stuck on a restart
-    this.beginIntro();
+    if (level === 2) { this.hl.load(); this.beginDayCut(); } else this.beginIntro();
   }
   resetWorld() {
     for (const t of this.traps) { try { t.dispose(); } catch (e) { console.warn(e); } } this.traps = []; this.fishCollected = 0; this.trapsPlacedTotal = 0; this.fishByType = {}; this.time = 0; this.hudT = 0;
     this.hp = 100; this.hpRegenT = 0; this.ambushCool = 60; this.weeping = false; this.player.reset(); this.ghost.reset(); this.fishSys.reset(); this.events.reset(); this.frogs.reset(); this.threat = 0;
+    this.hl.reset(); this.necklace = { worn: false, broken: false }; if (this.necklaceItem) { this.env.houseItems = this.env.houseItems.filter(i => i !== this.necklaceItem); if (this.necklaceItem.mesh) this.necklaceItem.mesh.visible = false; this.necklaceItem = null; }
     this.env.door.open = false; this.env.door.t = 0; this.env.door.col.active = true;
     for (const it of this.env.houseItems) if (it.mesh) { it.mesh.visible = true; it.taken = false; }
     this.ghost.mesh.scale.set(1, 1, 1); $('bloodTint').style.opacity = 0;
   }
   beginIntro() {
-    this.state = 'intro'; this.introT = 0; this.introStep = -1; this.ui.hud(false); this.ui.show('intro'); this.ui.fade(true);
+    this.env.setDay(false); this.placeBedNecklace(); this.player.hands.visible = true; this.player.armL.visible = true; this.state = 'intro'; this.introT = 0; this.introStep = -1; this.ui.hud(false); this.ui.show('intro'); this.ui.fade(true);
     this.camera.position.set(-3.05, FLOOR_Y + 0.62, -1.7); this.camera.rotation.set(1.2, Math.PI, 0);
     this.audio.resume();
   }
-  skipIntro() { if (this.state === 'intro' && this.introT > 1) this.introT = 9.2; }
+  placeBedNecklace() { // level 2: the farmer's necklace lies on your bed - press E to wear it
+    if (this.level !== 2 || this.necklaceItem) return; let m = null;
+    try { const A = this._cutV; m = A ? A.neck.clone() : null; } catch (e) { m = null; }
+    if (!m) { m = new THREE.Group(); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.008, 6, 20), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.6 })), tooth = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.1, 6), new THREE.MeshStandardMaterial({ color: 0xe8e0c8, roughness: 0.5 })); ring.rotation.x = Math.PI / 2; tooth.position.set(0, 0.0, 0.11); tooth.rotation.x = Math.PI / 2; m.add(ring, tooth); m.position.y = 0; }
+    m.visible = true; m.position.set(-3.05, FLOOR_Y + 0.56, -1.7); m.rotation.set(-Math.PI / 2, 0, 0.4); this.scene.add(m); this.necklaceItem = { type: 'necklace', mesh: m, pos: V3(-3.05, FLOOR_Y + 0.6, -1.7), range: 2.9, taken: false }; this.env.houseItems.push(this.necklaceItem);
+  }
+  skipIntro() { if (this.state === 'intro' && this.introT > 1) this.introT = 9.2; else if (this.state === 'cut' && this.cut && this.cut.t > 1 && this.cut.t < 28.7) { this.cut.t = 28.7; $('dialog').classList.remove('show'); } }
   introUpdate(dt) {
     this.introT += dt; const t = this.introT, st = t < 2.2 ? 0 : t < 5 ? 1 : t < 8.5 ? 2 : 3;
     if (st !== this.introStep) {
@@ -89,9 +99,67 @@ class GameManager {
       this.camera.rotation.set(lerp(1.2, 0, e) + Math.sin(t * 2) * 0.01, Math.PI + Math.sin(t * 0.8) * 0.2 * (1 - e), 0);
     }
   }
+  // ---------- level 2: daytime cut-scene in front of the house (old farmer gives you a necklace) ----------
+  loadCutAssets() {
+    if (this._cutA) return this._cutA; const tex = IS_TOUCH ? 512 : 1024;
+    return this._cutA = Promise.all([GhostRig.load('assets/farmer.glb?v=1', 1.62, tex, false, { plain: true }), loadPropModel('assets/necklace.glb?v=1', 0.3, 512)]).then(([rig, neck]) => {
+      rig.root.visible = false; neck.visible = false; this.scene.add(rig.root, neck); const fp = neck.clone(); fp.visible = false; fp.scale.setScalar(0.75); return this._cutV = { rig, neck, fp };
+    }).catch((e) => { console.warn('[cutscene] assets failed, skipping it', e); this._cutA = null; return null; });
+  }
+  async beginDayCut() {
+    this.state = 'cutload'; this.ui.hud(false); this.ui.show('intro'); this.ui.fade(true); this.audio.resume();
+    const A = await this.loadCutAssets(); if (this.state !== 'cutload') return; if (!A) return this.beginIntro();
+    const R = A.rig, p = this.player; this.env.setDay(true);
+    R.root.visible = true; R.root.position.set(4.8, 0.3, 7.7); R.root.rotation.y = -1.3; R.play('fwalk', 0.1);
+    A.neck.visible = false; A.fp.visible = false; p.armR.add(A.fp); A.fp.position.set(0.011, 0, -0.45); A.fp.rotation.set(-0.4, 0, 0);
+    p.hand.visible = false; p.beam.visible = false; p.spot.intensity = 0; p.hands.visible = false; p.pos.set(0, 0.3, 10.2);
+    this.camera.position.set(0, 0.3 + 1.62, 10.2); this.cut = { t: 0, A, done: {}, arm: 0 };
+    this.state = 'cut'; this.introT = 0; this.ui.fade(false);
+  }
+  cutUpdate(dt) {
+    const c = this.cut, A = c.A, R = A.rig, ui = this.ui, p = this.player, cam = this.camera; c.t += dt; const t = c.t, ts = t - 1.5, rp = R.root.position;
+    const at = (k, f) => { if (ts >= k && !c.done[k]) { c.done[k] = 1; f(); } };
+    const KH = (who, s) => (who ? 'តា៖ ' : 'ខ្ញុំ៖ ') + s;
+    const face = (yaw, k) => { let d = yaw - R.root.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); R.root.rotation.y += d * Math.min(1, dt * k); };
+    const toCam = Math.atan2(cam.position.x - rp.x, cam.position.z - rp.z);
+    // camera: fixed, looking at where the farmer will stand, with a tiny breathing sway
+    cam.rotation.set(-0.2 + Math.sin(t * 1.1) * 0.004, -0.27 + Math.sin(t * 0.7) * 0.006, 0);
+    // farmer movement: walks in from the right, stops, turns to us; at the end turns and walks away
+    if (c.phase === undefined) { const dx = 0.45 - rp.x, dz = 8.6 - rp.z, d = Math.hypot(dx, dz); if (d > 0.06) { const k = Math.min(1, 1.05 * dt / d); rp.x += dx * k; rp.z += dz * k; R.root.rotation.y = Math.atan2(dx, dz); } else { c.phase = 1; R.play('fidle', 0.3); } } // walks right up to us before speaking
+    else if (c.phase === 3) { face(Math.PI / 2, 4); if (Math.abs(R.root.rotation.y - Math.PI / 2) < 0.5) rp.x += 0.95 * dt; }
+    else face(toCam, 5);
+    at(4.3, () => { R.play('ftalk', 0.3); ui.say(KH(1, 'អាចៅ! យប់មិញរកត្រីបានច្រើនទេ?'), 'Grandpa: "Hey, kiddo! Did you catch a lot of fish last night?"', 3600); });
+    at(7.9, () => R.play('fidle', 0.3));
+    at(8.2, () => ui.say(KH(0, 'បានច្រើនគួរសមដែរតា តែខ្មោចលងចង់ងាប់ហើយតាអើយ'), 'Me: "Quite a lot, Grandpa — but the ghost is driving me crazy."', 4000));
+    at(12.4, () => { R.play('fpocket', 0.2); ui.say(KH(1, 'នេះ យកខ្សែកនេះទុកទៅ វាជួយចៅពីពួក ខ្មោច ព្រាយ អសុរកាយ បានខ្លះដែរ'), 'Grandpa: "Here, take this necklace. It can protect you a little from ghosts and evil spirits."', 5000); });
+    at(13.8, () => { R.play('fgive', 0.3); A.neck.visible = true; });
+    at(17.6, () => { ui.say(KH(0, 'អរគុណហើយលោកតា'), 'Me: "Thank you, Grandpa."', 2600); this.player.hands.visible = true; this.player.hands.position.set(0, 0, 0); this.player.armL.visible = false; c.qR = this.player.armR.quaternion.clone(); });
+    at(18.6, () => { A.neck.visible = false; A.fp.visible = true; this.audio.pickup(); R.play('fidle', 0.4); });
+    at(20.5, () => { ui.say(KH(1, 'អើមិនអីទេ តែត្រូវប្រុងប្រយ័ត្នផង ព្រោះវាមិនអាចជួយសង្គ្រោះចៅបានគង់វង្សទេ តាលាសិនហើយ'), 'Grandpa: "You are welcome. But be careful — it cannot save you forever. I will be going now."', 5200); R.play('ftalk', 0.3); });
+    at(24.0, () => { c.phase = 3; R.play('fwalk', 0.3); });
+    at(24.6, () => ui.say(KH(0, 'បាទតា'), 'Me: "Yes, Grandpa."', 2200));
+    at(27.2, () => { ui.fade(true); $('dialog').classList.remove('show'); });
+    // first-person arm: reaches toward the necklace in his hand, holds it, pulls back to rest, then lowers out of view
+    if (ts >= 17.6 && ts < 23.5) {
+      const sm = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }, reach = ts < 20.5 ? sm((ts - 17.6) / 1.0) : 1 - sm((ts - 20.5) / 0.9), low = sm((ts - 22.6) / 0.8);
+      const Tw = this._tw || (this._tw = V3()); if (!c.tgt) R.bones.RightHand.getWorldPosition(Tw); else Tw.copy(c.tgt); if (ts >= 18.6 && !c.tgt) c.tgt = Tw.clone();
+      cam.updateMatrixWorld(true); const Tl = cam.worldToLocal(Tw.clone()), F = Tl.clone().normalize().multiplyScalar(0.7), d = F.clone().sub(V3(0.32, -0.7, 0.1)).normalize(), B = F.clone().addScaledVector(d, -0.43);
+      const q1 = c.qT || (c.qT = new THREE.Quaternion()), q0 = c.qR || (c.qR = p.armR.quaternion.clone()); q1.setFromUnitVectors(V3(0, 0, -1), d);
+      p.armR.position.set(lerp(0.27, B.x, reach) + 0.13 * low, lerp(-0.34, B.y, reach) - 0.45 * low, lerp(-0.2, B.z, reach) + 0.1 * low); p.armR.quaternion.copy(q0).slerp(q1, reach);
+      A.fp.quaternion.copy(p.armR.quaternion).invert();
+    } else if (ts >= 23.5 && p.hands.visible && !c.armDone) { c.armDone = 1; p.hands.visible = false; A.fp.visible = false; p.armR.position.set(0.27, -0.34, -0.2); p.armR.quaternion.copy(c.qR || p.armR.quaternion); }
+    R.update(dt, {});
+    if (A.neck.visible) { const v = this._cv || (this._cv = V3()); R.bones.RightHand.getWorldPosition(v); A.neck.position.set(v.x, v.y + 0.04, v.z + 0.03); A.neck.rotation.set(0, toCam, Math.sin(t * 3) * 0.05); }
+    this.env.update(dt, p); this.fx.update(dt); this.audio.setListener(cam);
+    if (ts >= 29.0) { R.root.visible = false; A.neck.visible = false; A.fp.visible = false; this.cut = null; this.beginIntro(); }
+  }
   finishIntro() {
-    this.ui.introText(''); this.ui.show(null); this.ui.hud(true); this.state = 'playing'; this.camera.rotation.set(0, Math.PI, 0);
-    this.player.pos.set(-1.5, FLOOR_Y, -1.0); this.player.eyeY = FLOOR_Y + 1.62; if (!IS_TOUCH && !this.controls.isLocked) { this.pause(); return; }
+    this.ui.introText(''); this.ui.hud(true); this.state = 'mission'; this.camera.rotation.set(0, Math.PI, 0);
+    this.player.pos.set(-1.5, FLOOR_Y, -1.0); this.player.eyeY = FLOOR_Y + 1.62;
+    this.ui.show('mission'); if (document.pointerLockElement) document.exitPointerLock();
+  }
+  startMission() { // the mission card is dismissed: the real game starts (inside a tap/click so pointer-lock is allowed)
+    if (this.state !== 'mission') return; this.goFullscreen(); this.state = 'playing'; this.ui.show(null); this.audio.resume(); this.lockPointer();
     this.ui.toast('Look around the house. Press E to take the flashlight and the fishing traps.', 6000);
   }
   goFullscreen() { // must run inside a click/tap handler; also locks landscape (Android needs fullscreen first)
@@ -131,14 +199,17 @@ class GameManager {
   win() {
     this.state = 'win'; this.ui.hud(false); this.audio.win(); this.ui.show('victory'); if (document.pointerLockElement) document.exitPointerLock();
     const f = Object.keys(this.fishByType).map(k => `${FISH_TYPES[k].km} ×${this.fishByType[k]}`).join(' · ');
+    $('btnNext').style.display = this.level === 1 ? '' : 'none'; $('winSub').textContent = this.level === 1 ? 'អ្នករួចជីវិត · ព្រឹកមកដល់ហើយ' : 'អ្នករួចជីវិត · កម្រិត ២ ចប់ហើយ';
     $('winStats').innerHTML = `You returned home with ${this.fishCollected} fish<br>${f}<br>Time: ${Math.floor(this.time / 60)}m ${Math.floor(this.time % 60)}s`;
   }
+  quotaMet() { const T = this.targets; if (T.byType) return Object.entries(T.byType).every(([k, n]) => (this.fishByType[k] || 0) >= n); return this.fishCollected >= T.fish; }
+  fishProgress() { const T = this.targets, b = this.fishByType; return T.byType ? `${b.catfish || 0}/${T.byType.catfish} · ${b.snakehead || 0}/${T.byType.snakehead}` : `${this.fishCollected}/${T.fish}`; }
   objective() {
     const p = this.player, T = this.targets, have = p.carried + this.trapsPlacedTotal;
     if (!p.hasFlashlight) return 'Take the flashlight (ពិល) from the table.';
     if (this.trapsPlacedTotal < T.traps && p.carried === 0 && have < T.traps) return `Take fishing traps (បង្កៃ) from the table. (${p.carried}/${MAX_CARRY})`;
     if (this.trapsPlacedTotal < T.traps) return p.inHouse ? 'Leave the house and walk the rice-field dikes.' : `Place ${T.traps - this.trapsPlacedTotal} more trap(s) in the paddy water. (Click / E)`;
-    if (this.fishCollected < T.fish) return `Wait for fish, then check your traps. Collect ${T.fish - this.fishCollected} more.`;
+    if (!this.quotaMet()) return T.byType ? `Check your traps. Still need: ${Math.max(0, T.byType.catfish - (this.fishByType.catfish || 0))} catfish · ${Math.max(0, T.byType.snakehead - (this.fishByType.snakehead || 0))} snakehead.` : `Wait for fish, then check your traps. Collect ${T.fish - this.fishCollected} more.`;
     return 'Return to the old house. Survive.';
   }
 
@@ -158,7 +229,7 @@ class GameManager {
     const k = (a) => `<kbd>${IS_TOUCH ? 'E' : 'E'}</kbd>${a}`; const p = this.player;
     switch (it.type) {
       case 'door': return k(this.env.door.open ? 'Close door' : 'Open door');
-      case 'flash': return k('Take flashlight (ពិល)'); case 'battery': return k('Replace flashlight batteries');
+      case 'necklace': return k('Wear the necklace (ពាក់ខ្សែក)'); case 'flash': return k('Take flashlight (ពិល)'); case 'battery': return k('Replace flashlight batteries');
       case 'trap': return k(`Take fishing trap (${p.carried}/${MAX_CARRY})`);
       case 'pull': return it.trap.state === 'caught' ? k(`Pull up trap – something is thrashing inside! (${FISH_TYPES[it.trap.fishType].km})`) : k('Pull up trap and check the bait');
     }
@@ -174,6 +245,7 @@ class GameManager {
           d.open = false; au.doorClose({ x: 0, y: 2, z: 3 });
         } break;
       }
+      case 'necklace': this.necklace.worn = true; it.taken = true; it.mesh.visible = false; au.pickup(); ui.flash('#ffe2a8', 0.35, 500); ui.toast('ពាក់ខ្សែកហើយ · You put on the necklace', 3200); break;
       case 'flash': p.hasFlashlight = true; it.taken = true; it.mesh.visible = false; p.hand.visible = true; p.flashOn = true; au.pickup(); ui.toast('Flashlight taken. Press F to toggle it.', 3500); break;
       case 'battery': p.battery = 100; au.pickup(); ui.toast('Fresh batteries inserted.', 2000); break;
       case 'trap':
@@ -183,15 +255,15 @@ class GameManager {
       case 'pull': {
         const tr = it.trap;
         // sometimes the "fish" in the trap is HER
-        if (tr.state === 'caught' && this.ambushCool <= 0 && this.fishCollected >= 1 && !p.inHouse && !this.ghost.hunting && this.ghost.state === 'dormant' && Math.random() < 0.38) return this.startAmbush(tr);
+        if (this.level === 1 && tr.state === 'caught' && this.ambushCool <= 0 && this.fishCollected >= 1 && !p.inHouse && !this.ghost.hunting && this.ghost.state === 'dormant' && Math.random() < 0.38) return this.startAmbush(tr);
         if (!tr.beginPull(() => this.finishPull(tr))) return; p.doAct('pull', 1.2); break;
       }
     }
   }
   finishPull(tr) {
-    const p = this.player, au = this.audio, ui = this.ui, type = tr.takeFish(); tr.dispose(); this.traps = this.traps.filter(t => t !== tr); p.carried++; p.pulled++; au.pickup();
-    if (type) { this.fishCollected++; this.fishByType[type] = (this.fishByType[type] || 0) + 1; ui.toast(`${FISH_TYPES[type].km} · ${FISH_TYPES[type].en} caught! (${this.fishCollected}/${this.targets.fish})`, 3200);
-      if (this.fishCollected === this.targets.fish && this.trapsPlacedTotal >= this.targets.traps) ui.toast('Enough fish. Go home — now.', 4000, true); }
+    const p = this.player, au = this.audio, ui = this.ui, type = tr.takeFish(); tr.dispose(); this.traps = this.traps.filter(t => t !== tr); p.carried++; p.pulled++; au.pickup(); const wasMet = this.quotaMet(); this.hl.onPull();
+    if (type) { this.fishCollected++; this.fishByType[type] = (this.fishByType[type] || 0) + 1; ui.toast(`${FISH_TYPES[type].km} · ${FISH_TYPES[type].en} caught! (${this.fishProgress()})`, 3200);
+      if (!wasMet && this.quotaMet() && this.trapsPlacedTotal >= this.targets.traps) ui.toast('Enough fish. Go home — now.', 4000, true); }
     else ui.toast('The bait is gone, but the trap is empty. Put it back in the water.', 3200);
   }
   placementSpot() {
@@ -214,10 +286,13 @@ class GameManager {
     const dt = Math.min(this.clock.getDelta(), 0.05); this.t += dt;
     if (this.built) {
             if (this.state === 'intro') { this.introUpdate(dt); this.env.update(dt, this.player); this.fx.update(dt); }
+      else if (this.state === 'cut') this.cutUpdate(dt);
+      else if (this.state === 'headev') this.hl.headUpdate(dt);
+      else if (this.state === 'hl') this.hl.update(dt);
       else if (this.state === 'playing') this.playUpdate(dt);
       else if (this.state === 'caught') this.caughtUpdate(dt);
       else if (this.state === 'ambush') this.ambushUpdate(dt);
-      else if (this.state === 'menu' || this.state === 'paused' || this.state === 'over' || this.state === 'win') this.env.update(dt * (this.state === 'menu' ? 1 : 0), this.player);
+      else if (this.state === 'menu' || this.state === 'cutload' || this.state === 'mission' || this.state === 'paused' || this.state === 'over' || this.state === 'win') this.env.update(dt * (this.state === 'menu' ? 1 : 0), this.player);
       this.audio.setListener(this.camera);
     }
     this.renderer.render(this.scene, this.camera);
@@ -226,7 +301,7 @@ class GameManager {
     this.time += dt; const p = this.player;
     p.update(dt); this.env.update(dt, p); this.ghost.update(dt); if (this.weeping) this.weepUpdate(dt); this.fishSys.update(dt); this.fx.update(dt); this.audio.update(dt, p);
     for (const t of this.traps) t.update(dt); this.events.update(dt); this.frogs.update(dt);
-    this.ambushCool -= dt;
+    this.ambushCool -= dt; if (this.level === 2) this.hl.tick(dt);
     if (!this.ghost.hunting && this.hp < 100) { this.hpRegenT -= dt; if (this.hpRegenT <= 0) this.hp = Math.min(100, this.hp + 2 * dt); }
     $('hpBar').style.width = this.hp + '%'; $('hpTxt').textContent = Math.round(this.hp);
     // threat feedback
@@ -241,7 +316,7 @@ class GameManager {
     else this.ui.prompt(null, false);
     this.previewMesh.visible = showPrev;
     // win condition
-    if (p.inHouse && this.fishCollected >= this.targets.fish && this.trapsPlacedTotal >= this.targets.traps) this.win();
+    if (p.inHouse && this.quotaMet() && this.trapsPlacedTotal >= this.targets.traps) this.win();
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.1; this.ui.update(this); }
   }
   startWeep() { // she is crying on the dike and you came close: the scene plays out while you stay free to move
@@ -270,12 +345,15 @@ class GameManager {
     const dx = this.ambBase.x - tr.pos.x, dz = this.ambBase.z - tr.pos.z, l = Math.hypot(dx, dz) || 1; this.ambDir = V3(dx / l, 0, dz / l); // from the trap toward the player
     this.ambS = V3(tr.pos.x, 0, tr.pos.z); this.ambH = V3(this.ambBase.x - this.ambDir.x * 1.0, 0, this.ambBase.z - this.ambDir.z * 1.0); // where she rises / where she ends up in front of you
     gh.state = 'ambush'; gh.hunting = false; gh.mesh.visible = true; gh.sink = 1.8; gh.mesh.scale.set(1, 1, 1); gh.pos.set(this.ambS.x, this.env.groundY(this.ambS.x, this.ambS.z), this.ambS.z); gh.yaw = Math.atan2(dx, dz); gh.light.intensity = 0.8;
-    this.ui.prompt(null, false); this.fx.splash(tr.pos.x, tr.pos.z, 10, 0.6); this.audio.gurgle(gh.pos); this.audio.splash(gh.pos, 2);
+    this.ui.prompt(null, false); this.fx.splash(tr.pos.x, tr.pos.z, 10, 0.6); this.audio.gurgle(gh.pos); this.audio.splash(gh.pos, 2); this.audio.rise(gh.pos);
   }
   ambushUpdate(dt) { // she rises from the water, slaps you down (-50 HP), laughs, then dissolves
     const t = (this.ambT += dt), gh = this.ghost, cam = this.camera, F = this.ambF, p = this.player, env = this.env;
     const T_RISE = 1.1, T_LUNGE = 1.5, T_HIT = 1.85, T_LAUGH = 2.4, T_VAN = T_LAUGH + this.audio.laughShriekAt() + 1.3, T_END = T_VAN + 0.8, ez = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
     env.update(dt, p); this.fx.update(dt); for (const tr of this.traps) tr.update(dt); this.frogs.update(dt); this.audio.update(dt, p);
+    $('hpBar').style.width = this.hp + '%'; $('hpTxt').textContent = Math.round(this.hp); // show the lost blood the moment she slaps (this used to refresh only after the scene ended)
+    // heartbeat: starts when she rises, speeds up and gets louder until the slap, then slowly calms down while she laughs and fades
+    F.hbT = (F.hbT || 0) - dt; if (F.hbT <= 0 && t < T_VAN) { const k = t < T_HIT ? t / T_HIT : 1 - Math.min(1, (t - T_HIT) / (T_VAN - T_HIT)); this.audio.heartbeat(0.5 + 0.7 * k); F.hbT = lerp(0.9, 0.42, k); }
     // ghost: rise -> lunge -> stand over you
     const k = ez((t - T_RISE) / (T_LUNGE - T_RISE)); gh.pos.x = this.ambS.x + (this.ambH.x - this.ambS.x) * k; gh.pos.z = this.ambS.z + (this.ambH.z - this.ambS.z) * k; gh.pos.y = env.groundY(gh.pos.x, gh.pos.z);
     gh.sink = 1.8 * (1 - ez(t / T_RISE)); gh.yaw = Math.atan2(this.ambBase.x - gh.pos.x, this.ambBase.z - gh.pos.z);

@@ -116,14 +116,14 @@ export class GhostAI {
   roll() {
     const g = this.g, pl = g.player, ev = g.events, ten = clamp(this.outside / 240, 0, 1), inside = pl.inHouse, o = this.outside;
     if (!inside && !this.seenFirst && o > 28) { this.seenFirst = true; this.run('distant'); return; }
-    if (!inside && !this.firstWeeper && o > 55 && this.girl && this.huntCooldown <= 0 && ev.ready('weeper')) { this.run('weeper'); return; } // guaranteed first meeting with the weeping woman
+    if (g.level !== 2 && !inside && !this.firstWeeper && o > 55 && this.girl && this.huntCooldown <= 0 && ev.ready('weeper')) { this.run('weeper'); return; } // guaranteed first meeting with the weeping woman
     if (!inside && !this.firstHunt && o > 130 && this.huntCooldown <= 0) { this.firstHunt = true; this.run('hunt'); return; }
     let items = inside ? [{ k: 'cry', w: 2 }, { k: 'whisper', w: 2 }, { k: 'steps', w: 1 }, { k: 'breath', w: 1.5 }, { k: 'flicker', w: 2 }, { k: 'knock', w: 1 }, { k: 'canal', w: 1 }]
       : [{ k: 'cry', w: 2.5 }, { k: 'whisper', w: 2 }, { k: 'steps', w: 2 }, { k: 'breath', w: 1.5 }, { k: 'rice', w: 2 }, { k: 'flicker', w: 1.5 }, { k: 'canal', w: 1.5 },
         { k: 'shadow', w: 1.6 }, { k: 'fishjump', w: 1.6 }, { k: 'distant', w: 2.4 }, { k: 'path', w: 2 }, { k: 'tree', w: 1.6 }, { k: 'watch', w: 2 }, { k: 'ricehide', w: 1.6 }];
     if (!inside && g.traps.length) items.push({ k: 'trapmove', w: 1.2 });
     if (!inside && o > 40) items.push({ k: 'behind', w: 1.4 });
-    if (!inside && o > 70 && this.girl && this.huntCooldown <= 0) items.push({ k: 'weeper', w: 2.6 });
+    if (g.level !== 2 && !inside && o > 70 && this.girl && this.huntCooldown <= 0) items.push({ k: 'weeper', w: 2.6 });
     if (!inside && o > 60) items.push({ k: 'creep', w: 1.3 });
     if (!inside && o > 50 && this.huntCooldown <= 0) items.push({ k: 'hunt', w: 0.8 + ten * 2.5 });
     items = items.filter(i => ev.ready(i.k)); if (!items.length) { this.eventTimer = 6; return; }

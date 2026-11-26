@@ -40,6 +40,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 #hpBar{background:linear-gradient(90deg,#5a0008,#e0202c)}
 #batteryBar{background:linear-gradient(90deg,#8a6d1a,#e3c34a)}
 #batteryBar.low{background:linear-gradient(90deg,#7a0c14,var(--red2))}
+#staminaBar{background:linear-gradient(90deg,#14507a,#3fb0ee)}
 #staminaBar.low{background:linear-gradient(90deg,#444,#888)}
 #inventory{position:absolute;right:14px;bottom:16px;display:flex;gap:8px}
 .slot{min-width:62px;padding:6px 8px;background:var(--panel);border:1px solid rgba(255,255,255,.14);text-align:center;position:relative}
@@ -211,3 +212,11 @@ body.q-medium #game,body.q-high #game{filter:contrast(1.1) saturate(.85) brightn
 .howKh{font-family:'Noto Sans Khmer',var(--body),sans-serif}
 .howEn{margin-top:6px;padding-top:14px;border-top:1px solid rgba(255,255,255,.14);opacity:.78}
 .howEn .story{font-size:12.5px}.howEn .keys,.howEn .tips{font-size:12px}
+
+#mission{background:rgba(0,0,0,.6)}
+.missionPanel{text-align:center;gap:14px}
+.missionKh{font-family:'Noto Sans Khmer',var(--body),sans-serif;font-size:clamp(17px,3.6vw,26px);line-height:1.7;color:var(--ink)}
+.missionKh b,.missionEn b{color:var(--red2)}
+.missionEn{font-family:var(--body);font-size:clamp(13px,2.4vw,17px);color:var(--mute);padding-top:10px;border-top:1px solid rgba(255,255,255,.14)}
+#levels{background:rgba(0,0,0,.78)}
+#levels .panel button{display:block;width:100%;line-height:1.6}

@@ -49,7 +49,8 @@ export class PlayerController {
   bindKeys() {
     addEventListener('keydown', (e) => {
       if (e.repeat) return; this.keys[e.code] = true; const g = this.g;
-      if (g.state === 'intro' && (e.code === 'Enter' || e.code === 'Space')) g.skipIntro();
+      if (g.state === 'mission' && (e.code === 'Enter' || e.code === 'Space')) g.startMission();
+      if ((g.state === 'intro' || g.state === 'cut') && (e.code === 'Enter' || e.code === 'Space')) g.skipIntro();
       if (g.state !== 'playing') return;
       if (e.code === 'KeyE') g.interact(); else if (e.code === 'KeyF') this.toggleFlash(); else if (e.code === 'KeyP') g.pause();
       if (e.code === 'Space') e.preventDefault();
